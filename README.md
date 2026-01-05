@@ -51,6 +51,9 @@ Instead of typing passwords in chat, players authenticate through a custom inter
 :small_blue_diamond: Reload configuration without restarting
 
 :gear: Compatibility
+
 Supports Spigot / Paper 1.20.1+
+
 Works on online-mode and offline-mode servers
+
 No dependencies required
