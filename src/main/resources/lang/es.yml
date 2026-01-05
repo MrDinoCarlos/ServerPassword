@@ -1,0 +1,34 @@
+prefix: "&7[&bServerPass&7] "
+
+# Lock titles
+locked-title: "&bAcceso requerido"
+locked-subtitle: "&7Introduce la contraseña del servidor"
+
+# Generic states
+wrong-password: "&cContraseña incorrecta. Intentos: {used}/{max}"
+cooldown: "&eEspera {seconds}s antes de volver a intentar."
+kicked: "&cDemasiados intentos. Vuelve a entrar para reintentar."
+banned: "&4Demasiados fallos. Estás baneado."
+success: "&a¡Acceso concedido!"
+
+# GUI
+gui-clear: "&cLimpiar"
+gui-submit: "&aConfirmar"
+
+# Kicks
+auth-required: "&cAutenticación requerida."
+auth-timeout: "&cTiempo de autenticación agotado."
+
+# Join delayed (si lo usas con StealthManager)
+join-message: "&e{player} se ha unido al servidor"
+
+# Admin command (/spass)
+admin-no-permission: "&cNo tienes permiso."
+admin-help-1: "&b/spass set <contraseña> &7- cambia la contraseña del servidor"
+admin-help-2: "&b/spass reload &7- recarga la configuración"
+admin-reloaded: "&aConfiguración recargada."
+admin-password-set: "&aContraseña cambiada."
+admin-unknown-subcommand: "&cSubcomando desconocido. Usa /spass help"
+
+# Command /serverpass (si lo mantienes)
+serverpass-usage: "&cUso: /serverpass <contraseña>"

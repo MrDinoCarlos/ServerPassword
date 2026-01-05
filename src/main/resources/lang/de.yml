@@ -1,0 +1,34 @@
+prefix: "&7[&bServerPass&7] "
+
+# Lock titles
+locked-title: "&bZugriff erforderlich"
+locked-subtitle: "&7Gib das Serverpasswort ein"
+
+# Generic states
+wrong-password: "&cFalsches Passwort. Versuche: {used}/{max}"
+cooldown: "&eWarte {seconds}s, bevor du es erneut versuchst."
+kicked: "&cZu viele Versuche. Verbinde dich erneut, um es noch einmal zu versuchen."
+banned: "&4Zu viele fehlgeschlagene Versuche. Du wurdest gebannt."
+success: "&aZugriff gewährt!"
+
+# GUI
+gui-clear: "&cZurücksetzen"
+gui-submit: "&aBestätigen"
+
+# Kicks
+auth-required: "&cAuthentifizierung erforderlich."
+auth-timeout: "&cAuthentifizierungszeit abgelaufen."
+
+# Join delayed
+join-message: "&e{player} hat den Server betreten"
+
+# Admin command (/spass)
+admin-no-permission: "&cKeine Berechtigung."
+admin-help-1: "&b/spass set <passwort> &7- Serverpasswort setzen"
+admin-help-2: "&b/spass reload &7- Konfiguration neu laden"
+admin-reloaded: "&aKonfiguration neu geladen."
+admin-password-set: "&aPasswort gesetzt."
+admin-unknown-subcommand: "&cUnbekannter Unterbefehl. Verwende /spass help"
+
+# Command /serverpass
+serverpass-usage: "&cVerwendung: /serverpass <passwort>"

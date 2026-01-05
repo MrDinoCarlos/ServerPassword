@@ -1,0 +1,16 @@
+name: ServerPassword
+version: 1.2X-0.0.1
+main: es.mrdino.serverpassword.ServerPassPlugin
+api-version: "1.20"
+
+commands:
+  serverpass:
+    description: Enter the server password
+    usage: /serverpass <password>
+  spass:
+    description: Admin commands for ServerPassword
+    usage: /spass help
+
+permissions:
+  serverpassword.admin:
+    default: op
