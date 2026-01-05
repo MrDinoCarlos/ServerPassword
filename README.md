@@ -3,6 +3,7 @@ Server Password is a server-wide authentication plugin that protects access to y
 Instead of typing passwords in chat, players authenticate through a custom interactive code interface, ensuring a clean, safe, and modern login experience — even on offline-mode servers.
 
 :sparkles: Key Features
+
 :small_blue_diamond: Server-wide password protection
 :small_blue_diamond: Fully GUI-based login (no chat input)
 :small_blue_diamond: Custom code interface
