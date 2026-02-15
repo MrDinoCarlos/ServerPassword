@@ -1,8 +1,10 @@
 package es.mrdino.serverpassword;
 
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -38,7 +40,25 @@ public class JoinListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        // Opcional: limpiar flags / sesiones si quieres
-        // auth.clearSession(e.getPlayer());
+        e.setQuitMessage(null);
+
+        Player player = e.getPlayer();
+
+        // ✅ Guardar SIEMPRE la última posición real del jugador al salir
+        lock.updateReturnLocation(player);
+
+        // ✅ Limpiar estado temporal (sin borrar returnLocation)
+        lock.cleanupSession(player);
+    }
+
+    @EventHandler
+    public void onKick(PlayerKickEvent e) {
+        Player player = e.getPlayer();
+
+        // ✅ Guardar SIEMPRE la última posición real del jugador al salir (kick)
+        lock.updateReturnLocation(player);
+
+        // ✅ Limpiar estado temporal (sin borrar returnLocation)
+        lock.cleanupSession(player);
     }
 }
