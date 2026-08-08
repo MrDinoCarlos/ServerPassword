@@ -55,6 +55,8 @@ code-gui:
   max-length: 9 #Max. length of password, range from 1-9.
   charset: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
   title: "&5&lServer Password"
+  on-close: "REOPEN" # REOPEN avoids accidental kicks if another plugin/client closes the GUI. KICK restores strict old behavior.
+  reopen-delay-ticks: 2
 
   # ============================================================
   #  CODE GUI - HEAD TEXTURES

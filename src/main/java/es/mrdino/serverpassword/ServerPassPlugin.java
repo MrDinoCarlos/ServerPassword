@@ -27,9 +27,12 @@ public class ServerPassPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new JoinListener(this, authManager, lockdownManager, stealth), this);
 
 
-        getCommand("spass").setExecutor(new AdminCommand(this, authManager, lang));
-
-
+        if (getCommand("serverpass") != null) {
+            getCommand("serverpass").setExecutor(new ServerPassCommand(this, authManager, lockdownManager, lang));
+        }
+        if (getCommand("spass") != null) {
+            getCommand("spass").setExecutor(new AdminCommand(this, authManager, lang, codeUI));
+        }
     }
 
     @Override

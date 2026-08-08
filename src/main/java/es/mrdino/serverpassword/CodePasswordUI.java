@@ -106,7 +106,8 @@ public class CodePasswordUI implements Listener {
     }
 
     private int displayFromSeconds() {
-        int s = plugin.getConfig().getInt("timeout.display-from", 25);
+        int s = plugin.getConfig().getInt("timeout.start-display-at",
+                plugin.getConfig().getInt("timeout.display-from", 25));
         if (s < 0) s = 0;
         if (s > 99) s = 99;
         return s;
@@ -114,6 +115,15 @@ public class CodePasswordUI implements Listener {
 
     private String timeoutExpireAction() {
         return plugin.getConfig().getString("timeout.on-expire", "KICK");
+    }
+
+    private String inventoryCloseAction() {
+        return plugin.getConfig().getString("code-gui.on-close", "REOPEN");
+    }
+
+    private int reopenDelayTicks() {
+        int ticks = plugin.getConfig().getInt("code-gui.reopen-delay-ticks", 2);
+        return Math.max(1, Math.min(20, ticks));
     }
 
     public void open(Player p) {
@@ -176,6 +186,14 @@ public class CodePasswordUI implements Listener {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> internalClose.remove(id), 2L);
             });
         }
+    }
+
+    public void cleanupSession(Player p) {
+        UUID id = p.getUniqueId();
+        stopTimeout(p);
+        openInv.remove(id);
+        indicesByPlayer.remove(id);
+        internalClose.remove(id);
     }
 
     private void fillBackground(Inventory inv) {
@@ -320,7 +338,7 @@ public class CodePasswordUI implements Listener {
     private void onTimeoutExpire(Player p) {
         String action = timeoutExpireAction();
         if ("REOPEN".equalsIgnoreCase(action)) {
-            open(p);
+            startTimeout(p);
             return;
         }
 
@@ -460,19 +478,31 @@ public class CodePasswordUI implements Listener {
         if (ours == null) return;
         if (e.getInventory() != ours) return;
 
-        // Si está locked y cierra, kick (evita bypass y evita loops)
         if (lock.isLocked(p) && !auth.isAuthed(p)) {
-            stopTimeout(p);
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (p.isOnline() && lock.isLocked(p) && !auth.isAuthed(p)) {
-                    // ✅ SOLO CAMBIO: kick traducible
-                    p.kickPlayer(lang.tr(p, "auth-required"));
-                }
-            });
-        } else {
-            stopTimeout(p);
-            openInv.remove(id);
-            indicesByPlayer.remove(id);
+            if ("KICK".equalsIgnoreCase(inventoryCloseAction())) {
+                stopTimeout(p);
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (p.isOnline() && lock.isLocked(p) && !auth.isAuthed(p)) {
+                        p.kickPlayer(lang.tr(p, "auth-required"));
+                    }
+                });
+                return;
+            }
+
+            reopenExisting(p, ours);
+            return;
         }
+
+        cleanupSession(p);
+    }
+
+    private void reopenExisting(Player p, Inventory inv) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            UUID id = p.getUniqueId();
+            if (!p.isOnline() || !lock.isLocked(p) || auth.isAuthed(p)) return;
+            if (openInv.get(id) != inv) return;
+            if (p.getOpenInventory().getTopInventory() == inv) return;
+            p.openInventory(inv);
+        }, reopenDelayTicks());
     }
 }

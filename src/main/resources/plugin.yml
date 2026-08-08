@@ -1,7 +1,9 @@
 name: ServerPassword
-version: 1.2X-0.0.2
+version: '${version}'
 main: es.mrdino.serverpassword.ServerPassPlugin
-api-version: "1.20"
+api-version: '${apiVersion}'
+loadbefore:
+  - PerPlayerProfiles
 
 commands:
   serverpass:

@@ -9,6 +9,8 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 
+import java.util.Locale;
+
 public class LockdownListener implements Listener {
     private final LockdownManager lock;
 
@@ -38,7 +40,16 @@ public class LockdownListener implements Listener {
 
     @EventHandler
     public void onCmd(PlayerCommandPreprocessEvent e) {
-        if (lock.isLocked(e.getPlayer())) e.setCancelled(true);
+        if (!lock.isLocked(e.getPlayer())) return;
+
+        String message = e.getMessage().trim();
+        String label = message.split("\\s+", 2)[0];
+        if (label.startsWith("/")) label = label.substring(1);
+        int namespaceSeparator = label.indexOf(':');
+        if (namespaceSeparator >= 0) label = label.substring(namespaceSeparator + 1);
+        if ("serverpass".equals(label.toLowerCase(Locale.ROOT))) return;
+
+        e.setCancelled(true);
     }
 
     @EventHandler public void onBreak(BlockBreakEvent e){ if(lock.isLocked(e.getPlayer())) e.setCancelled(true); }

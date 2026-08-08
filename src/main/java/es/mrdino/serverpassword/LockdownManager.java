@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.UUID;
 
 public class LockdownManager {
+    private static final int LOCK_EFFECT_DURATION_TICKS = 20 * 60 * 10;
+
     private final JavaPlugin plugin;
     private final AuthManager auth;
     private final Lang lang;
@@ -47,9 +49,9 @@ public class LockdownManager {
         boolean effects = plugin.getConfig().getBoolean("lock.apply-blindness", true);
         if (effects) {
             // Duración larga, sin partículas
-            p.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 20 * 60 * 10, 1, false, false));
-            p.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 20 * 60 * 10, 0, false, false));
-            p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 20 * 60 * 10, 0, false, false));
+            addEffect(p, "BLINDNESS", 1);
+            addEffect(p, "DARKNESS", 0);
+            addEffect(p, "INVISIBILITY", 0);
 
             // invulnerable + oculto
             p.setInvulnerable(true);
@@ -72,23 +74,22 @@ public class LockdownManager {
     }
 
     public void unlock(Player p) {
-        locked.put(p.getUniqueId(), false);
+        locked.remove(p.getUniqueId());
 
         // Cerrar GUI si estaba abierta
         if (ui != null) ui.forceClose(p);
 
-        p.removePotionEffect(PotionEffectType.BLINDNESS);
-        p.removePotionEffect(PotionEffectType.DARKNESS);
+        removeEffect(p, "BLINDNESS");
+        removeEffect(p, "DARKNESS");
         p.setInvulnerable(false);
         p.setCollidable(true);
         p.setInvisible(false);
-        p.removePotionEffect(PotionEffectType.INVISIBILITY);
+        removeEffect(p, "INVISIBILITY");
 
         // volver a mostrar
         stealth.showToEveryone(p);
         if (stealth.consumePendingJoinAnnounce(p)) {
-            // Mensaje simple. Si quieres traducible lo hacemos con Lang.
-            plugin.getServer().broadcastMessage("§e" + p.getName() + " joined the server");
+            plugin.getServer().broadcastMessage(lang.tr(p, "join-message", Map.of("player", p.getName())));
         }
 
         String mode = plugin.getConfig().getString("success-teleport", "LAST_LOCATION");
@@ -112,8 +113,12 @@ public class LockdownManager {
         returnLocation.remove(p.getUniqueId());
         if (ui != null) ui.forceClose(p);
 
-        p.removePotionEffect(PotionEffectType.BLINDNESS);
-        p.removePotionEffect(PotionEffectType.DARKNESS);
+        removeEffect(p, "BLINDNESS");
+        removeEffect(p, "DARKNESS");
+        removeEffect(p, "INVISIBILITY");
+        p.setInvulnerable(false);
+        p.setCollidable(true);
+        p.setInvisible(false);
     }
 
     public java.util.Collection<Player> getLockedPlayersOnline() {
@@ -144,8 +149,30 @@ public class LockdownManager {
 
         // Quitamos el estado "locked" para que no queden restos al desconectar.
         locked.remove(uuid);
+        if (ui != null) ui.cleanupSession(player);
 
         // NO borres returnLocation si quieres conservar la última ubicación
         // returnLocation.remove(uuid);
+    }
+
+    private void addEffect(Player player, String effectName, int amplifier) {
+        PotionEffectType type = effect(effectName);
+        if (type == null) return;
+        player.addPotionEffect(new PotionEffect(type, LOCK_EFFECT_DURATION_TICKS, amplifier, false, false));
+    }
+
+    private void removeEffect(Player player, String effectName) {
+        PotionEffectType type = effect(effectName);
+        if (type == null) return;
+        player.removePotionEffect(type);
+    }
+
+    @SuppressWarnings("deprecation")
+    private PotionEffectType effect(String name) {
+        try {
+            return PotionEffectType.getByName(name);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 }

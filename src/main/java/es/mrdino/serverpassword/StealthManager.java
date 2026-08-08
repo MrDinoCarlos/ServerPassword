@@ -47,4 +47,8 @@ public class StealthManager {
     public boolean consumePendingJoinAnnounce(Player p) {
         return pendingJoinAnnounce.remove(p.getUniqueId());
     }
+
+    public void clearPendingJoinAnnounce(Player p) {
+        pendingJoinAnnounce.remove(p.getUniqueId());
+    }
 }

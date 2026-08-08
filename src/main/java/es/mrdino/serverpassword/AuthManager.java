@@ -13,6 +13,7 @@ public class AuthManager {
     private final Lang lang;
 
     private final Set<UUID> authed = new HashSet<>();
+    private final Map<UUID, Long> rememberedUntilMs = new HashMap<>();
     private final Map<UUID, Integer> attemptsThisJoin = new HashMap<>();
     private final Map<String, Integer> failsByIp = new HashMap<>();
     private final Map<UUID, Long> cooldownUntilMs = new HashMap<>();
@@ -27,19 +28,66 @@ public class AuthManager {
     }
 
     public boolean isAuthed(Player p) {
-        return authed.contains(p.getUniqueId());
+        UUID id = p.getUniqueId();
+        if (authed.contains(id)) {
+            return true;
+        }
+        if (hasRememberedSession(id)) {
+            authed.add(id);
+            return true;
+        }
+        return false;
     }
 
     public void markAuthed(Player p) {
-        authed.add(p.getUniqueId());
-        attemptsThisJoin.remove(p.getUniqueId());
-        cooldownUntilMs.remove(p.getUniqueId());
+        UUID id = p.getUniqueId();
+        authed.add(id);
+        rememberSession(id);
+        attemptsThisJoin.remove(id);
+        cooldownUntilMs.remove(id);
+    }
+
+    public boolean beginJoin(Player p) {
+        UUID id = p.getUniqueId();
+        authed.remove(id);
+        attemptsThisJoin.remove(id);
+        cooldownUntilMs.remove(id);
+
+        if (!hasRememberedSession(id)) {
+            return false;
+        }
+
+        authed.add(id);
+        return true;
     }
 
     public void clearSession(Player p) {
         authed.remove(p.getUniqueId());
         attemptsThisJoin.remove(p.getUniqueId());
         cooldownUntilMs.remove(p.getUniqueId());
+    }
+
+    private void rememberSession(UUID id) {
+        int minutes = plugin.getConfig().getInt("remember-session-minutes", 0);
+        if (minutes <= 0) {
+            rememberedUntilMs.remove(id);
+            return;
+        }
+
+        long durationMs = Duration.ofMinutes(minutes).toMillis();
+        rememberedUntilMs.put(id, System.currentTimeMillis() + durationMs);
+    }
+
+    private boolean hasRememberedSession(UUID id) {
+        Long until = rememberedUntilMs.get(id);
+        if (until == null) {
+            return false;
+        }
+        if (until <= System.currentTimeMillis()) {
+            rememberedUntilMs.remove(id);
+            return false;
+        }
+        return true;
     }
 
     public int getAttemptsThisJoin(Player p) {
@@ -106,7 +154,10 @@ public class AuthManager {
     }
 
     public void shutdown() {
-        // si luego guardamos datos, aquí se persistirá
+        authed.clear();
+        rememberedUntilMs.clear();
+        attemptsThisJoin.clear();
+        cooldownUntilMs.clear();
     }
 
     public enum AuthResult { SUCCESS, WRONG, MAX_ATTEMPTS, COOLDOWN, BANNED }

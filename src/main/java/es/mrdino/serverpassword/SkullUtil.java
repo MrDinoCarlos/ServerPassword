@@ -7,6 +7,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.profile.PlayerProfile;
 
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -33,7 +34,7 @@ public final class SkullUtil {
 
             // Si parece base64, decodificamos y extraemos la URL
             if (!base64OrUrl.startsWith("http")) {
-                String decoded = new String(Base64.getDecoder().decode(base64OrUrl));
+                String decoded = new String(Base64.getDecoder().decode(base64OrUrl), StandardCharsets.UTF_8);
                 // buscamos el campo ... "url":"...."
                 int i = decoded.indexOf("\"url\":\"");
                 if (i >= 0) {
@@ -43,7 +44,7 @@ public final class SkullUtil {
                 }
             }
 
-            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID(), null);
+            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
             profile.getTextures().setSkin(new URL(url));
             meta.setOwnerProfile(profile);
             head.setItemMeta(meta);

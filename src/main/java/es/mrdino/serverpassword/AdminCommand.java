@@ -9,11 +9,13 @@ public class AdminCommand implements CommandExecutor {
     private final JavaPlugin plugin;
     private final AuthManager auth;
     private final Lang lang;
+    private final CodePasswordUI codeUI;
 
-    public AdminCommand(JavaPlugin plugin, AuthManager auth, Lang lang) {
+    public AdminCommand(JavaPlugin plugin, AuthManager auth, Lang lang, CodePasswordUI codeUI) {
         this.plugin = plugin;
         this.auth = auth;
         this.lang = lang;
+        this.codeUI = codeUI;
     }
 
     @Override
@@ -32,6 +34,7 @@ public class AdminCommand implements CommandExecutor {
 
         if (args[0].equalsIgnoreCase("reload")) {
             plugin.reloadConfig();
+            codeUI.reloadTextures();
             sender.sendMessage(lang.msg(sender, "admin-reloaded"));
             return true;
         }

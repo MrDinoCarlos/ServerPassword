@@ -24,18 +24,25 @@ public class JoinListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
+        Player player = e.getPlayer();
+
+        // Reset per-connection state, but keep a valid remembered session.
+        if (auth.beginJoin(player)) {
+            lock.cleanupSession(player);
+            return;
+        }
+
         // ✅ No anunciar join todavía
         e.setJoinMessage(null);
 
         // ✅ Marcar join pendiente para anunciar al autenticar
-        stealth.markPendingJoinAnnounce(e.getPlayer());
+        stealth.markPendingJoinAnnounce(player);
 
         // ✅ Asegurar sesión limpia y lock
-        auth.clearSession(e.getPlayer());
-        lock.lock(e.getPlayer());
+        lock.lock(player);
 
         // ✅ Si ya hay otros locked, que el nuevo no los vea
-        stealth.hideLockedFrom(e.getPlayer(), lock.getLockedPlayersOnline());
+        stealth.hideLockedFrom(player, lock.getLockedPlayersOnline());
     }
 
     @EventHandler
@@ -49,6 +56,8 @@ public class JoinListener implements Listener {
 
         // ✅ Limpiar estado temporal (sin borrar returnLocation)
         lock.cleanupSession(player);
+        auth.clearSession(player);
+        stealth.clearPendingJoinAnnounce(player);
     }
 
     @EventHandler
@@ -60,5 +69,7 @@ public class JoinListener implements Listener {
 
         // ✅ Limpiar estado temporal (sin borrar returnLocation)
         lock.cleanupSession(player);
+        auth.clearSession(player);
+        stealth.clearPendingJoinAnnounce(player);
     }
 }

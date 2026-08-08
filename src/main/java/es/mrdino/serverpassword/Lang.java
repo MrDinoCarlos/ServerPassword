@@ -19,6 +19,7 @@ public class Lang {
         this.plugin = plugin;
         load("en");
         load("es");
+        load("de");
     }
 
     private void load(String code) {
