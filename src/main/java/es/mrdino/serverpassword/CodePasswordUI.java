@@ -1,7 +1,6 @@
 package es.mrdino.serverpassword;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -68,12 +67,13 @@ public class CodePasswordUI implements Listener {
     }
 
     private String charset() {
-        return plugin.getConfig().getString("code-gui.charset", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        String configured = plugin.getConfig().getString("code-gui.charset", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        return (configured == null || configured.isEmpty()) ? "0123456789" : configured;
     }
 
     private String guiTitle() {
         String t = plugin.getConfig().getString("code-gui.title", "&6&lServer Password");
-        return ChatColor.translateAlternateColorCodes('&', t);
+        return Lang.color(t);
     }
 
     private int codeLength() {
@@ -140,14 +140,14 @@ public class CodePasswordUI implements Listener {
         Arrays.fill(idx, 0);
         indicesByPlayer.put(p.getUniqueId(), idx);
 
-        Inventory inv = Bukkit.createInventory(p, 54, guiTitle());
+        Inventory inv = PlatformCompat.createInventory(p, 54, guiTitle());
         fillBackground(inv);
 
         int sc = startCol(len);
 
         for (int i = 0; i < len; i++) {
-            inv.setItem(9 + sc + i, controlItem("up", Material.ARROW, ChatColor.GREEN + "▲"));
-            inv.setItem(27 + sc + i, controlItem("down", Material.ARROW, ChatColor.RED + "▼"));
+            inv.setItem(9 + sc + i, controlItem("up", Material.ARROW, "§a▲"));
+            inv.setItem(27 + sc + i, controlItem("down", Material.ARROW, "§c▼"));
             inv.setItem(18 + sc + i, charHead(set.charAt(idx[i] % set.length())));
         }
 
@@ -196,12 +196,32 @@ public class CodePasswordUI implements Listener {
         internalClose.remove(id);
     }
 
+    public void shutdown() {
+        for (Integer taskId : new ArrayList<>(timeoutTask.values())) {
+            Bukkit.getScheduler().cancelTask(taskId);
+        }
+        timeoutTask.clear();
+        timeLeft.clear();
+
+        for (UUID id : new ArrayList<>(openInv.keySet())) {
+            Player player = Bukkit.getPlayer(id);
+            if (player == null || !player.isOnline()) continue;
+
+            internalClose.add(id);
+            player.closeInventory();
+        }
+
+        openInv.clear();
+        indicesByPlayer.clear();
+        internalClose.clear();
+    }
+
     private void fillBackground(Inventory inv) {
         String tex = controlTextures.getOrDefault("filler", "");
         if (tex != null && !tex.isBlank()) {
             ItemStack head = SkullUtil.headFromTexture(tex);
             ItemMeta m = head.getItemMeta();
-            m.setDisplayName(" ");
+            PlatformCompat.setDisplayName(m, " ");
             head.setItemMeta(m);
             for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, head);
             return;
@@ -209,7 +229,7 @@ public class CodePasswordUI implements Listener {
 
         ItemStack glass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta m = glass.getItemMeta();
-        m.setDisplayName(" ");
+        PlatformCompat.setDisplayName(m, " ");
         glass.setItemMeta(m);
         for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, glass);
     }
@@ -221,7 +241,7 @@ public class CodePasswordUI implements Listener {
                 : new ItemStack(fallbackMat);
 
         ItemMeta m = it.getItemMeta();
-        m.setDisplayName(fallbackName);
+        PlatformCompat.setDisplayName(m, fallbackName);
         it.setItemMeta(m);
         return it;
     }
@@ -233,7 +253,7 @@ public class CodePasswordUI implements Listener {
                 : new ItemStack(Material.PLAYER_HEAD);
 
         ItemMeta m = head.getItemMeta();
-        m.setDisplayName(ChatColor.AQUA + "" + ChatColor.BOLD + c);
+        PlatformCompat.setDisplayName(m, "§b§l" + c);
         head.setItemMeta(m);
         return head;
     }
@@ -259,7 +279,7 @@ public class CodePasswordUI implements Listener {
                 : new ItemStack(Material.PLAYER_HEAD);
 
         ItemMeta m = head.getItemMeta();
-        m.setDisplayName("§7§l/");
+        PlatformCompat.setDisplayName(m, "§7§l/");
         head.setItemMeta(m);
         return head;
     }
@@ -272,7 +292,7 @@ public class CodePasswordUI implements Listener {
                 : new ItemStack(Material.PLAYER_HEAD);
 
         ItemMeta m = head.getItemMeta();
-        m.setDisplayName(fallbackName);
+        PlatformCompat.setDisplayName(m, fallbackName);
         head.setItemMeta(m);
         return head;
     }
@@ -344,7 +364,7 @@ public class CodePasswordUI implements Listener {
 
         forceClose(p);
         // ✅ SOLO CAMBIO: kick traducible
-        p.kickPlayer(lang.tr(p, "auth-timeout"));
+        PlatformCompat.kick(p, lang.tr(p, "auth-timeout"));
     }
 
     private void updateTimerItem(Player p) {
@@ -369,7 +389,7 @@ public class CodePasswordUI implements Listener {
                 : new ItemStack(Material.PLAYER_HEAD);
 
         ItemMeta m = head.getItemMeta();
-        m.setDisplayName("§e§l" + seconds + "s");
+        PlatformCompat.setDisplayName(m, "§e§l" + seconds + "s");
         head.setItemMeta(m);
         return head;
     }
@@ -423,14 +443,14 @@ public class CodePasswordUI implements Listener {
 
             if (result == AuthManager.AuthResult.BANNED) {
                 forceClose(p);
-                p.kickPlayer(lang.tr(p, "banned"));
+                PlatformCompat.kick(p, lang.tr(p, "banned"));
                 return;
             }
 
             if (result == AuthManager.AuthResult.MAX_ATTEMPTS) {
                 forceClose(p);
                 String action = plugin.getConfig().getString("on-fail-action", "KICK");
-                if ("KICK".equalsIgnoreCase(action)) p.kickPlayer(lang.tr(p, "kicked"));
+                if ("KICK".equalsIgnoreCase(action)) PlatformCompat.kick(p, lang.tr(p, "kicked"));
             }
             return;
         }
@@ -483,7 +503,7 @@ public class CodePasswordUI implements Listener {
                 stopTimeout(p);
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     if (p.isOnline() && lock.isLocked(p) && !auth.isAuthed(p)) {
-                        p.kickPlayer(lang.tr(p, "auth-required"));
+                        PlatformCompat.kick(p, lang.tr(p, "auth-required"));
                     }
                 });
                 return;

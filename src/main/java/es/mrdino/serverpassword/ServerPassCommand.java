@@ -55,12 +55,12 @@ public class ServerPassCommand implements CommandExecutor {
             case MAX_ATTEMPTS -> {
                 String action = plugin.getConfig().getString("on-fail-action", "KICK");
                 if ("KICK".equalsIgnoreCase(action)) {
-                    p.kickPlayer(lang.tr(p, "kicked"));
+                    PlatformCompat.kick(p, lang.tr(p, "kicked"));
                 } else {
                     p.sendMessage(lang.msg(p, "kicked"));
                 }
             }
-            case BANNED -> p.kickPlayer(lang.tr(p, "banned"));
+            case BANNED -> PlatformCompat.kick(p, lang.tr(p, "banned"));
         }
 
         return true;

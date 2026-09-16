@@ -1,10 +1,9 @@
 package es.mrdino.serverpassword;
 
-import org.bukkit.BanList;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.*;
 
@@ -126,15 +125,16 @@ public class AuthManager {
         cooldownUntilMs.put(p.getUniqueId(), System.currentTimeMillis() + cooldownSec * 1000L);
 
         // count per IP for ban threshold
-        String ip = (p.getAddress() != null) ? p.getAddress().getAddress().getHostAddress() : "unknown";
+        InetAddress address = (p.getAddress() != null) ? p.getAddress().getAddress() : null;
+        String ip = (address != null) ? address.getHostAddress() : "unknown";
         failsByIp.put(ip, failsByIp.getOrDefault(ip, 0) + 1);
 
         boolean banEnabled = plugin.getConfig().getBoolean("ban.enabled", true);
         int banAfter = plugin.getConfig().getInt("ban.after-total-fails", 8);
         long banDuration = plugin.getConfig().getLong("ban.duration-seconds", 0);
 
-        if (banEnabled && !"unknown".equals(ip) && failsByIp.get(ip) >= banAfter) {
-            banIp(ip, banDuration);
+        if (banEnabled && address != null && failsByIp.get(ip) >= banAfter) {
+            banIp(address, banDuration);
             return AuthResult.BANNED;
         }
 
@@ -145,12 +145,12 @@ public class AuthManager {
         return AuthResult.WRONG;
     }
 
-    private void banIp(String ip, long durationSeconds) {
+    private void banIp(InetAddress address, long durationSeconds) {
         Date expires = null;
         if (durationSeconds > 0) {
             expires = new Date(System.currentTimeMillis() + Duration.ofSeconds(durationSeconds).toMillis());
         }
-        Bukkit.getBanList(BanList.Type.IP).addBan(ip, "Too many failed password attempts", expires, null);
+        PlatformCompat.banIp(address, "Too many failed password attempts", expires);
     }
 
     public void shutdown() {

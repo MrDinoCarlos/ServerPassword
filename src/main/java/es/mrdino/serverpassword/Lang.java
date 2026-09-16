@@ -1,6 +1,5 @@
 package es.mrdino.serverpassword;
 
-import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -85,6 +84,18 @@ public class Lang {
     }
 
     public static String color(String s) {
-        return ChatColor.translateAlternateColorCodes('&', s);
+        if (s == null || s.isEmpty()) return "";
+
+        char[] chars = s.toCharArray();
+        for (int i = 0; i < chars.length - 1; i++) {
+            if (chars[i] != '&') continue;
+
+            char code = Character.toLowerCase(chars[i + 1]);
+            if ("0123456789abcdefklmnorx".indexOf(code) < 0) continue;
+
+            chars[i] = '\u00a7';
+            chars[i + 1] = code;
+        }
+        return new String(chars);
     }
 }

@@ -52,8 +52,14 @@ Instead of typing passwords in chat, players authenticate through a custom inter
 
 :gear: Compatibility
 
-Supports Spigot / Paper 1.20.1+
+The standard JAR supports Spigot / Paper 1.20.1 through 1.21.11.
 
-Works on online-mode and offline-mode servers
+The `paper26x` JAR supports Paper 26.1 through 26.3 and requires Java 25, as required by Paper.
 
-No dependencies required
+Works on online-mode and offline-mode servers.
+
+No plugin dependencies required.
+
+:hammer: Building
+
+Run `./gradlew build` (`gradlew.bat build` on Windows). The build produces both the standard JAR and the dedicated Paper 26.X JAR in `build/libs`.

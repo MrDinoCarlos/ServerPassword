@@ -24,7 +24,8 @@ public class ServerPassPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(codeUI, this);
         getServer().getPluginManager().registerEvents(new LockdownListener(lockdownManager), this);
-        getServer().getPluginManager().registerEvents(new JoinListener(this, authManager, lockdownManager, stealth), this);
+        getServer().getPluginManager().registerEvents(PlatformCompat.chatListener(lockdownManager), this);
+        getServer().getPluginManager().registerEvents(new JoinListener(authManager, lockdownManager, stealth), this);
 
 
         if (getCommand("serverpass") != null) {
@@ -37,6 +38,8 @@ public class ServerPassPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        authManager.shutdown();
+        if (codeUI != null) codeUI.shutdown();
+        if (lockdownManager != null) lockdownManager.shutdown();
+        if (authManager != null) authManager.shutdown();
     }
 }

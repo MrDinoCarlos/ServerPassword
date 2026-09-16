@@ -4,12 +4,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.profile.PlayerProfile;
 
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.UUID;
 
 public final class SkullUtil {
     private SkullUtil() {}
@@ -30,23 +28,20 @@ public final class SkullUtil {
         if (meta == null) return head;
 
         try {
-            String url = base64OrUrl;
+            String value = base64OrUrl.trim();
+            String textureProperty = value;
+            String url;
 
-            // Si parece base64, decodificamos y extraemos la URL
-            if (!base64OrUrl.startsWith("http")) {
-                String decoded = new String(Base64.getDecoder().decode(base64OrUrl), StandardCharsets.UTF_8);
-                // buscamos el campo ... "url":"...."
-                int i = decoded.indexOf("\"url\":\"");
-                if (i >= 0) {
-                    int start = i + "\"url\":\"".length();
-                    int end = decoded.indexOf("\"", start);
-                    if (end > start) url = decoded.substring(start, end);
-                }
+            if (value.startsWith("http://") || value.startsWith("https://")) {
+                url = URI.create(value).toASCIIString();
+                String propertyJson = "{\"textures\":{\"SKIN\":{\"url\":\"" + url + "\"}}}";
+                textureProperty = Base64.getEncoder().encodeToString(propertyJson.getBytes(StandardCharsets.UTF_8));
+            } else {
+                String decoded = new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
+                url = extractTextureUrl(decoded);
             }
 
-            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
-            profile.getTextures().setSkin(new URL(url));
-            meta.setOwnerProfile(profile);
+            PlatformCompat.applySkullTexture(meta, textureProperty, URI.create(url).toURL());
             head.setItemMeta(meta);
         } catch (Exception ex) {
             // Si algo falla, dejamos la cabeza normal
@@ -54,5 +49,19 @@ public final class SkullUtil {
         }
 
         return head;
+    }
+
+    private static String extractTextureUrl(String propertyJson) {
+        int field = propertyJson.indexOf("\"url\":\"");
+        if (field < 0) {
+            throw new IllegalArgumentException("Texture property does not contain a URL");
+        }
+
+        int start = field + "\"url\":\"".length();
+        int end = propertyJson.indexOf('"', start);
+        if (end <= start) {
+            throw new IllegalArgumentException("Texture property contains an invalid URL");
+        }
+        return propertyJson.substring(start, end);
     }
 }

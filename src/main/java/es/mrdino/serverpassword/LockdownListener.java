@@ -5,9 +5,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerToggleFlightEvent;
 
 import java.util.Locale;
 
@@ -22,6 +22,7 @@ public class LockdownListener implements Listener {
     public void onMove(PlayerMoveEvent e) {
         var p = e.getPlayer();
         if (!lock.isLocked(p)) return;
+        lock.ensureTemporaryFlight(p);
 
         // Permite mirar (yaw/pitch), pero no moverse de bloque
         if (e.getFrom().getBlockX() == e.getTo().getBlockX()
@@ -34,7 +35,7 @@ public class LockdownListener implements Listener {
     }
 
     @EventHandler
-    public void onChat(AsyncPlayerChatEvent e) {
+    public void onToggleFlight(PlayerToggleFlightEvent e) {
         if (lock.isLocked(e.getPlayer())) e.setCancelled(true);
     }
 

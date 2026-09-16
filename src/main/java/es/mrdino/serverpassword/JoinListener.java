@@ -2,27 +2,25 @@ package es.mrdino.serverpassword;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 
 public class JoinListener implements Listener {
 
-    private final JavaPlugin plugin;
     private final AuthManager auth;
     private final LockdownManager lock;
     private final StealthManager stealth;
 
-    public JoinListener(JavaPlugin plugin, AuthManager auth, LockdownManager lock, StealthManager stealth) {
-        this.plugin = plugin;
+    public JoinListener(AuthManager auth, LockdownManager lock, StealthManager stealth) {
         this.auth = auth;
         this.lock = lock;
         this.stealth = stealth;
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onJoin(PlayerJoinEvent e) {
         Player player = e.getPlayer();
 
@@ -33,7 +31,7 @@ public class JoinListener implements Listener {
         }
 
         // ✅ No anunciar join todavía
-        e.setJoinMessage(null);
+        PlatformCompat.suppressJoinMessage(e);
 
         // ✅ Marcar join pendiente para anunciar al autenticar
         stealth.markPendingJoinAnnounce(player);
@@ -47,7 +45,7 @@ public class JoinListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        e.setQuitMessage(null);
+        PlatformCompat.suppressQuitMessage(e);
 
         Player player = e.getPlayer();
 
