@@ -19,6 +19,11 @@ interface PlatformAdapter {
 
     void setDisplayName(ItemMeta meta, String name);
 
+    void setLore(ItemMeta meta, java.util.List<String> lore);
+    org.bukkit.inventory.InventoryView openTextEditor(Player player);
+    String anvilText(Player player, Inventory inventory);
+    void freeAnvil(Player player, Inventory inventory);
+
     void kick(Player player, String message);
 
     void sendTitle(Player player, String title, String subtitle, int fadeInTicks, int stayTicks, int fadeOutTicks);

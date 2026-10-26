@@ -15,13 +15,15 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.*;
+import java.util.function.Predicate;
 
-public class CodePasswordUI implements Listener {
+public class CodePasswordUI implements Listener, PasswordUI {
 
     private final JavaPlugin plugin;
     private final AuthManager auth;
     private final LockdownManager lock;
     private final Lang lang;
+    private final Predicate<Player> enabled;
 
     private final Map<UUID, Inventory> openInv = new HashMap<>();
     private final Map<UUID, int[]> indicesByPlayer = new HashMap<>();
@@ -29,7 +31,7 @@ public class CodePasswordUI implements Listener {
     private final Map<Character, String> charTextures = new HashMap<>();
     private final Map<String, String> controlTextures = new HashMap<>();
 
-    // Evitar reabrir cuando cerramos nosotros
+    // Prevent reopening when the plugin closes the menu.
     private final Set<UUID> internalClose = new HashSet<>();
 
     // Timeout
@@ -37,10 +39,15 @@ public class CodePasswordUI implements Listener {
     private final Map<UUID, Integer> timeLeft = new HashMap<>();
 
     public CodePasswordUI(JavaPlugin plugin, AuthManager auth, LockdownManager lock, Lang lang) {
+        this(plugin, auth, lock, lang, player -> LoginSettings.legacy(plugin.getConfig()));
+    }
+
+    CodePasswordUI(JavaPlugin plugin, AuthManager auth, LockdownManager lock, Lang lang, Predicate<Player> enabled) {
         this.plugin = plugin;
         this.auth = auth;
         this.lock = lock;
         this.lang = lang;
+        this.enabled = enabled;
         reloadTextures();
     }
 
@@ -56,7 +63,7 @@ public class CodePasswordUI implements Listener {
             }
         }
 
-        // Controls planos (up/down/submit/clear/filler/slash)
+        // Flat controls: up, down, submit, clear, filler and slash.
         ConfigurationSection controls = plugin.getConfig().getConfigurationSection("code-gui.controls");
         if (controls != null) {
             for (String k : controls.getKeys(false)) {
@@ -67,6 +74,7 @@ public class CodePasswordUI implements Listener {
     }
 
     private String charset() {
+        if (auth.passwordIsNumeric()) return PasswordCredential.DIGITS;
         String configured = plugin.getConfig().getString("code-gui.charset", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
         return (configured == null || configured.isEmpty()) ? "0123456789" : configured;
     }
@@ -77,11 +85,10 @@ public class CodePasswordUI implements Listener {
     }
 
     private int codeLength() {
-        String pass = auth.getServerPassword();
-        int len = pass.length();
+        int len = auth.passwordLength();
         if (len < 1) len = 1;
 
-        int max = plugin.getConfig().getInt("code-gui.max-length", 9);
+        int max = auth.passwordIsNumeric() ? LoginSettings.MAX_PIN_LENGTH : plugin.getConfig().getInt("code-gui.max-length", 9);
         if (max < 1) max = 1;
         if (max > 9) max = 9;
 
@@ -127,6 +134,7 @@ public class CodePasswordUI implements Listener {
     }
 
     public void open(Player p) {
+        if (!enabled.test(p)) return;
         Inventory top = p.getOpenInventory().getTopInventory();
         Inventory ours = openInv.get(p.getUniqueId());
         if (ours != null && top == ours) return;
@@ -151,27 +159,27 @@ public class CodePasswordUI implements Listener {
             inv.setItem(18 + sc + i, charHead(set.charAt(idx[i] % set.length())));
         }
 
-        // ✅ SOLO CAMBIO: textos traducibles
+        // Localized button labels.
         inv.setItem(45, controlItem("clear", Material.BARRIER, lang.tr(p, "gui-clear")));
         inv.setItem(53, controlItem("submit", Material.LIME_WOOL, lang.tr(p, "gui-submit")));
 
-        // Intentos como HEADS
+        // Represent attempts using the original head textures.
         inv.setItem(48, triesUsedHead(p));
         inv.setItem(49, triesSlashHead());
         inv.setItem(50, triesMaxHead());
 
         openInv.put(p.getUniqueId(), inv);
 
-        // Iniciar timeout + pintar contador en esquina superior izquierda (slot 0)
+        // Start the timeout and render the clock.
         startTimeout(p);
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!p.isOnline() || !lock.isLocked(p) || auth.isAuthed(p)) return;
-            p.openInventory(inv);
+            if (enabled.test(p) && openInv.get(p.getUniqueId()) == inv) p.openInventory(inv);
         }, 1L);
     }
 
-    /** Cierra sin que se reabra */
+    /** Closes the menu without reopening it. */
     public void forceClose(Player p) {
         stopTimeout(p);
 
@@ -182,7 +190,7 @@ public class CodePasswordUI implements Listener {
         if (ours != null) {
             internalClose.add(id);
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (p.isOnline()) p.closeInventory();
+                if (p.isOnline() && p.getOpenInventory().getTopInventory() == ours) p.closeInventory();
                 Bukkit.getScheduler().runTaskLater(plugin, () -> internalClose.remove(id), 2L);
             });
         }
@@ -259,7 +267,7 @@ public class CodePasswordUI implements Listener {
     }
 
     // -------------------------
-    // Intentos: HEADS dinámicas
+    // Dynamic attempt counter heads.
     // -------------------------
 
     private ItemStack triesUsedHead(Player p) {
@@ -309,21 +317,22 @@ public class CodePasswordUI implements Listener {
     }
 
     // -------------------------
-    // Timeout: contador en slot 0
+    // Timeout counter.
     // -------------------------
 
     private void startTimeout(Player p) {
-        if (!timeoutEnabled()) return;
+        if (!enabled.test(p) || !timeoutEnabled()) return;
 
         stopTimeout(p);
 
         int total = timeoutSeconds();
         timeLeft.put(p.getUniqueId(), total);
 
-        // Pintar inicial
+        // Render the initial countdown.
         updateTimerItem(p);
 
         int taskId = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!enabled.test(p)) { stopTimeout(p); return; }
             if (!p.isOnline()) {
                 stopTimeout(p);
                 return;
@@ -363,7 +372,7 @@ public class CodePasswordUI implements Listener {
         }
 
         forceClose(p);
-        // ✅ SOLO CAMBIO: kick traducible
+        // Localized timeout message.
         PlatformCompat.kick(p, lang.tr(p, "auth-timeout"));
     }
 
@@ -407,7 +416,9 @@ public class CodePasswordUI implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
+        if (openInv.isEmpty()) return;
         if (!(e.getWhoClicked() instanceof Player p)) return;
+        if (!enabled.test(p)) return;
         if (!lock.isLocked(p)) return;
 
         Inventory ours = openInv.get(p.getUniqueId());
@@ -431,7 +442,8 @@ public class CodePasswordUI implements Listener {
         // Submit
         if (slot == 53) {
             String code = currentCode(p.getUniqueId());
-            AuthManager.AuthResult result = auth.tryPassword(p, code);
+            auth.tryPasswordAsync(p, code, result -> {
+            if (openInv.get(p.getUniqueId()) != ours || !lock.isLocked(p)) return;
 
             if (result == AuthManager.AuthResult.SUCCESS) {
                 forceClose(p);
@@ -451,7 +463,12 @@ public class CodePasswordUI implements Listener {
                 forceClose(p);
                 String action = plugin.getConfig().getString("on-fail-action", "KICK");
                 if ("KICK".equalsIgnoreCase(action)) PlatformCompat.kick(p, lang.tr(p, "kicked"));
+                else {
+                    auth.resetAttempts(p);
+                    open(p);
+                }
             }
+            });
             return;
         }
 
@@ -489,7 +506,9 @@ public class CodePasswordUI implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent e) {
+        if (openInv.isEmpty()) return;
         if (!(e.getPlayer() instanceof Player p)) return;
+        if (!enabled.test(p)) return;
 
         UUID id = p.getUniqueId();
         if (internalClose.contains(id)) return;
@@ -502,6 +521,7 @@ public class CodePasswordUI implements Listener {
             if ("KICK".equalsIgnoreCase(inventoryCloseAction())) {
                 stopTimeout(p);
                 Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (!enabled.test(p)) return;
                     if (p.isOnline() && lock.isLocked(p) && !auth.isAuthed(p)) {
                         PlatformCompat.kick(p, lang.tr(p, "auth-required"));
                     }
@@ -520,7 +540,7 @@ public class CodePasswordUI implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             UUID id = p.getUniqueId();
             if (!p.isOnline() || !lock.isLocked(p) || auth.isAuthed(p)) return;
-            if (openInv.get(id) != inv) return;
+            if (!enabled.test(p) || openInv.get(id) != inv) return;
             if (p.getOpenInventory().getTopInventory() == inv) return;
             p.openInventory(inv);
         }, reopenDelayTicks());

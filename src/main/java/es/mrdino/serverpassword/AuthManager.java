@@ -6,6 +6,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.net.InetAddress;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public class AuthManager {
     private final JavaPlugin plugin;
@@ -16,17 +21,41 @@ public class AuthManager {
     private final Map<UUID, Integer> attemptsThisJoin = new HashMap<>();
     private final Map<String, Integer> failsByIp = new HashMap<>();
     private final Map<UUID, Long> cooldownUntilMs = new HashMap<>();
+    private final Map<UUID, Long> pending = new HashMap<>();
+    private PasswordCredential credential;
+    private long credentialGeneration;
+    private long requestSequence;
+    private final ThreadPoolExecutor verifier = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(64), task -> {
+                Thread thread = new Thread(task, "ServerPassword-hash");
+                thread.setDaemon(true);
+                return thread;
+            });
 
-    public String getServerPassword() {
-        return plugin.getConfig().getString("password", "changeme");
+    public int passwordLength() { return credential.length(); }
+    public boolean passwordIsNumeric() { return credential.numeric(); }
+    public boolean isPasswordConfigured() { return credential.configured(); }
+
+    boolean updateCredential(PasswordCredential next) {
+        boolean changed = !credential.equals(next);
+        credential = next;
+        if (changed) {
+            credentialGeneration++;
+            rememberedUntilMs.clear();
+            authed.clear();
+            pending.clear();
+        }
+        return changed;
     }
 
     public AuthManager(JavaPlugin plugin, Lang lang) {
         this.plugin = plugin;
         this.lang = lang;
+        this.credential = PasswordCredential.read(plugin.getConfig());
     }
 
     public boolean isAuthed(Player p) {
+        if (!isPasswordConfigured()) return p.hasPermission("serverpassword.admin");
         UUID id = p.getUniqueId();
         if (authed.contains(id)) {
             return true;
@@ -49,8 +78,11 @@ public class AuthManager {
     public boolean beginJoin(Player p) {
         UUID id = p.getUniqueId();
         authed.remove(id);
+        pending.remove(id);
         attemptsThisJoin.remove(id);
         cooldownUntilMs.remove(id);
+
+        if (!isPasswordConfigured()) return p.hasPermission("serverpassword.admin");
 
         if (!hasRememberedSession(id)) {
             return false;
@@ -61,6 +93,7 @@ public class AuthManager {
     }
 
     public void clearSession(Player p) {
+        pending.remove(p.getUniqueId());
         authed.remove(p.getUniqueId());
         attemptsThisJoin.remove(p.getUniqueId());
         cooldownUntilMs.remove(p.getUniqueId());
@@ -104,16 +137,53 @@ public class AuthManager {
         return Math.max(0, (until - now + 999) / 1000);
     }
 
-    public AuthResult tryPassword(Player p, String pass) {
-        String expected = getServerPassword();
+    public void tryPasswordAsync(Player p, String pass, Consumer<AuthResult> callback) {
+        if (!isPasswordConfigured() || pass == null || pass.length() > 128 || pass.chars().anyMatch(Character::isISOControl)) {
+            callback.accept(AuthResult.INVALID_INPUT);
+            return;
+        }
+        UUID id = p.getUniqueId();
+        if (isOnCooldown(p) || pending.containsKey(id)) {
+            callback.accept(AuthResult.COOLDOWN);
+            return;
+        }
+        long request = ++requestSequence;
+        long generation = credentialGeneration;
+        PasswordCredential expected = credential;
+        pending.put(id, request);
+        try {
+            verifier.execute(() -> {
+                boolean correct = PasswordHasher.verify(pass, expected.hash());
+                if (!plugin.isEnabled()) return;
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (!Objects.equals(pending.get(id), request)) return;
+                    pending.remove(id);
+                    if (!p.isOnline() || generation != credentialGeneration) return;
+                    callback.accept(finishAttempt(p, correct));
+                });
+            });
+        } catch (RejectedExecutionException busy) {
+            pending.remove(id);
+            callback.accept(AuthResult.COOLDOWN);
+        }
+    }
+
+    void createCredentialAsync(String password, String legacyAlphabet, Consumer<PasswordCredential> callback) {
+        verifier.execute(() -> {
+            PasswordCredential generated = PasswordCredential.create(password, legacyAlphabet);
+            if (plugin.isEnabled()) plugin.getServer().getScheduler().runTask(plugin, () -> callback.accept(generated));
+        });
+    }
+
+    void resetAttempts(Player player) {
+        attemptsThisJoin.remove(player.getUniqueId());
+    }
+
+    void cancelPending(Player player) { pending.remove(player.getUniqueId()); }
+
+    private AuthResult finishAttempt(Player p, boolean ok) {
         int maxAttempts = plugin.getConfig().getInt("max-attempts-per-join", 3);
         int cooldownSec = plugin.getConfig().getInt("attempt-cooldown-seconds", 2);
-
-        if (isOnCooldown(p)) {
-            return AuthResult.COOLDOWN;
-        }
-
-        boolean ok = expected.equals(pass);
 
         if (ok) {
             markAuthed(p);
@@ -154,11 +224,14 @@ public class AuthManager {
     }
 
     public void shutdown() {
+        verifier.shutdownNow();
+        pending.clear();
         authed.clear();
         rememberedUntilMs.clear();
         attemptsThisJoin.clear();
         cooldownUntilMs.clear();
+        failsByIp.clear();
     }
 
-    public enum AuthResult { SUCCESS, WRONG, MAX_ATTEMPTS, COOLDOWN, BANNED }
+    public enum AuthResult { SUCCESS, WRONG, MAX_ATTEMPTS, COOLDOWN, BANNED, INVALID_INPUT }
 }

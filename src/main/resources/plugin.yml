@@ -1,9 +1,14 @@
 name: ServerPassword
 version: '${version}'
 main: es.mrdino.serverpassword.ServerPassPlugin
+description: Server-wide password login with native dialogs and vanilla inventory screens.
+authors: [MrDinoCarlos]
+website: https://mrdino.es/server-password/
 api-version: '${apiVersion}'
 loadbefore:
   - PerPlayerProfiles
+softdepend:
+  - ViaVersion
 
 commands:
   serverpass:

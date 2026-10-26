@@ -13,11 +13,11 @@ public final class SkullUtil {
     private SkullUtil() {}
 
     /**
-     * Acepta:
-     * - base64 JSON de textures (el típico "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5...")
-     * - o una URL directa a textures.minecraft.net (opcional)
+     * Accepts:
+     * - Base64-encoded texture property JSON.
+     * - A direct textures.minecraft.net URL.
      *
-     * Si no puede aplicarla, devuelve una cabeza normal.
+     * Returns an ordinary player head if the texture cannot be applied.
      */
     public static ItemStack headFromTexture(String base64OrUrl) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
@@ -44,7 +44,7 @@ public final class SkullUtil {
             PlatformCompat.applySkullTexture(meta, textureProperty, URI.create(url).toURL());
             head.setItemMeta(meta);
         } catch (Exception ex) {
-            // Si algo falla, dejamos la cabeza normal
+            // Keep an ordinary player head if the custom texture cannot be applied.
             Bukkit.getLogger().warning("[ServerPassword] Could not apply head texture: " + ex.getMessage());
         }
 

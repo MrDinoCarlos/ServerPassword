@@ -19,7 +19,7 @@ public class LockdownManager {
     private final Lang lang;
     private final StealthManager stealth;
 
-    private CodePasswordUI ui;
+    private volatile PasswordUI ui;
 
     private final Map<UUID, Location> returnLocation = new HashMap<>();
     private final Map<UUID, Boolean> locked = new ConcurrentHashMap<>();
@@ -32,12 +32,17 @@ public class LockdownManager {
         this.stealth = stealth;
     }
 
-    public void setUi(CodePasswordUI ui) {
+    public void setUi(PasswordUI ui) {
         this.ui = ui;
     }
 
     public boolean isLocked(Player p) {
         return locked.getOrDefault(p.getUniqueId(), false);
+    }
+
+    public boolean handleChat(Player player, String message) {
+        PasswordUI current = ui;
+        return current != null && current.handleChat(player, message);
     }
 
     public void ensureTemporaryFlight(Player player) {
@@ -53,22 +58,22 @@ public class LockdownManager {
         previousState.computeIfAbsent(p.getUniqueId(), ignored -> captureState(p, effects));
         locked.put(p.getUniqueId(), true);
 
-        // ✅ Guardar SIEMPRE la última posición conocida (se sobrescribe si ya existía)
+        // Record the player's current return location.
         updateReturnLocation(p);
 
         // Prevent vanilla's floating/flying kick while movement is frozen for authentication.
         ensureTemporaryFlight(p);
 
         if (effects) {
-            // Duración larga, sin partículas
+            // Long-lived effects without particles.
             addEffect(p, "BLINDNESS", 1);
             addEffect(p, "DARKNESS", 0);
             addEffect(p, "INVISIBILITY", 0);
 
-            // invulnerable + oculto
+            // Apply temporary protection and hide the player.
             p.setInvulnerable(true);
             p.setCollidable(false);
-            p.setInvisible(true); // (esto solo afecta a ciertas cosas; la invis real la hacemos con potion + hidePlayer)
+            p.setInvisible(true); // Player visibility is also managed with effects and hidePlayer.
             stealth.hideFromEveryone(p);
         }
 
@@ -79,7 +84,7 @@ public class LockdownManager {
                 0, 60, 10
         );
 
-        // Abrir UI con delay
+        // Open the login interface after the connection has settled.
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (ui == null) return;
             if (p.isOnline() && isLocked(p) && !auth.isAuthed(p)) ui.open(p);
@@ -89,12 +94,12 @@ public class LockdownManager {
     public void unlock(Player p) {
         locked.remove(p.getUniqueId());
 
-        // Cerrar GUI si estaba abierta
+        // Close the active login interface.
         if (ui != null) ui.forceClose(p);
 
         restoreState(p);
 
-        // volver a mostrar
+        // Release only this plugin's visibility restriction.
         stealth.showToEveryone(p);
         if (stealth.consumePendingJoinAnnounce(p)) {
             PlatformCompat.broadcast(plugin.getServer(), lang.tr(p, "join-message", Map.of("player", p.getName())));
@@ -105,10 +110,10 @@ public class LockdownManager {
             p.teleport(p.getWorld().getSpawnLocation());
         } else {
             Location loc = returnLocation.get(p.getUniqueId());
-            if (loc != null) {
+            if (loc != null && !p.getLocation().equals(loc)) {
                 p.teleport(loc);
-            } else {
-                // fallback por si nunca se guardó (evita casos raros)
+            } else if (loc == null) {
+                // Use the spawn if no return location was recorded.
                 p.teleport(p.getWorld().getSpawnLocation());
             }
         }
@@ -144,8 +149,8 @@ public class LockdownManager {
     }
 
     /**
-     * ✅ Guarda SIEMPRE la última localización del jugador (sobrescribe).
-     * Llamar en lock(), onQuit(), onKick(), etc.
+     * Updates the saved return location to the player's current location.
+     * Called when locking or disconnecting a player.
      */
     public void updateReturnLocation(Player player) {
         if (player == null) return;
@@ -154,8 +159,8 @@ public class LockdownManager {
     }
 
     /**
-     * Limpia estado temporal de sesión/lock sin borrar returnLocation
-     * (porque queremos poder volver a teletransportar a LAST_LOCATION al login).
+     * Clears temporary authentication state while retaining the return location
+     * for a later LAST_LOCATION teleport.
      */
     public void cleanupSession(Player player) {
         if (player == null) return;
@@ -167,7 +172,7 @@ public class LockdownManager {
         stealth.showToEveryone(player);
         if (ui != null) ui.cleanupSession(player);
 
-        // NO borres returnLocation si quieres conservar la última ubicación
+        // Retain the last return location across connections.
         // returnLocation.remove(uuid);
     }
 

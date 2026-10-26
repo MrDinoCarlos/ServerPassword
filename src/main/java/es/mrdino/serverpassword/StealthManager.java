@@ -9,14 +9,14 @@ import java.util.*;
 public class StealthManager {
     private final JavaPlugin plugin;
 
-    // Guardamos si hay que emitir el join “tarde”
+    // Track players whose join announcement is pending.
     private final Set<UUID> pendingJoinAnnounce = new HashSet<>();
 
     public StealthManager(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
-    /** Oculta al jugador de TODOS (mundo + TAB) */
+    /** Hides the player from other players in the world and tab list. */
     public void hideFromEveryone(Player p) {
         for (Player other : Bukkit.getOnlinePlayers()) {
             if (other.equals(p)) continue;
@@ -24,7 +24,7 @@ public class StealthManager {
         }
     }
 
-    /** Vuelve a mostrar al jugador a TODOS (mundo + TAB) */
+    /** Releases this plugin's hide request while respecting other plugins' requests. */
     public void showToEveryone(Player p) {
         for (Player other : Bukkit.getOnlinePlayers()) {
             if (other.equals(p)) continue;
@@ -32,7 +32,7 @@ public class StealthManager {
         }
     }
 
-    /** Por si entra alguien nuevo mientras p está oculto: que tampoco lo vea */
+    /** Hides unauthenticated players from a newly connected viewer. */
     public void hideLockedFrom(Player viewer, Collection<Player> lockedPlayers) {
         for (Player locked : lockedPlayers) {
             if (viewer.equals(locked)) continue;

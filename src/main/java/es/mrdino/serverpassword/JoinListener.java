@@ -13,11 +13,13 @@ public class JoinListener implements Listener {
     private final AuthManager auth;
     private final LockdownManager lock;
     private final StealthManager stealth;
+    private final SetupManager setup;
 
-    public JoinListener(AuthManager auth, LockdownManager lock, StealthManager stealth) {
+    JoinListener(AuthManager auth, LockdownManager lock, StealthManager stealth, SetupManager setup) {
         this.auth = auth;
         this.lock = lock;
         this.stealth = stealth;
+        this.setup = setup;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -25,21 +27,27 @@ public class JoinListener implements Listener {
         Player player = e.getPlayer();
 
         // Reset per-connection state, but keep a valid remembered session.
-        if (auth.beginJoin(player)) {
+        boolean remembered = auth.beginJoin(player);
+        if (!auth.isPasswordConfigured()) {
+            if (!player.hasPermission("serverpassword.admin")) PlatformCompat.suppressJoinMessage(e);
+            setup.onJoin(player);
+            return;
+        }
+        if (remembered) {
             lock.cleanupSession(player);
             return;
         }
 
-        // ✅ No anunciar join todavía
+        // Delay the join announcement until authentication succeeds.
         PlatformCompat.suppressJoinMessage(e);
 
-        // ✅ Marcar join pendiente para anunciar al autenticar
+        // Remember that a join announcement is pending.
         stealth.markPendingJoinAnnounce(player);
 
-        // ✅ Asegurar sesión limpia y lock
+        // Lock the new connection.
         lock.lock(player);
 
-        // ✅ Si ya hay otros locked, que el nuevo no los vea
+        // Hide other unauthenticated players from this player.
         stealth.hideLockedFrom(player, lock.getLockedPlayersOnline());
     }
 
@@ -49,10 +57,10 @@ public class JoinListener implements Listener {
 
         Player player = e.getPlayer();
 
-        // ✅ Guardar SIEMPRE la última posición real del jugador al salir
+        // Save the last actual location on disconnect.
         lock.updateReturnLocation(player);
 
-        // ✅ Limpiar estado temporal (sin borrar returnLocation)
+        // Clear temporary state while retaining the return location.
         lock.cleanupSession(player);
         auth.clearSession(player);
         stealth.clearPendingJoinAnnounce(player);
@@ -62,10 +70,10 @@ public class JoinListener implements Listener {
     public void onKick(PlayerKickEvent e) {
         Player player = e.getPlayer();
 
-        // ✅ Guardar SIEMPRE la última posición real del jugador al salir (kick)
+        // Save the last actual location on kick.
         lock.updateReturnLocation(player);
 
-        // ✅ Limpiar estado temporal (sin borrar returnLocation)
+        // Clear temporary state while retaining the return location.
         lock.cleanupSession(player);
         auth.clearSession(player);
         stealth.clearPendingJoinAnnounce(player);

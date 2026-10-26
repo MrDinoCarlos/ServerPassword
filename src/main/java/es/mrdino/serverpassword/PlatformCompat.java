@@ -22,7 +22,6 @@ final class PlatformCompat {
 
     private static PlatformAdapter createAdapter() {
         try {
-            Class.forName("io.papermc.paper.event.player.AsyncChatEvent", false, PlatformCompat.class.getClassLoader());
             Class<?> adapterClass = Class.forName(
                     "es.mrdino.serverpassword.PaperPlatformAdapter",
                     true,
@@ -30,7 +29,12 @@ final class PlatformCompat {
             );
             return (PlatformAdapter) adapterClass.getDeclaredConstructor().newInstance();
         } catch (ReflectiveOperationException | LinkageError ignored) {
-            return new LegacyPlatformAdapter();
+            try {
+                return (PlatformAdapter) Class.forName("es.mrdino.serverpassword.LegacyPlatformAdapter")
+                        .getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException | LinkageError failure) {
+                throw new IllegalStateException("No platform adapter is available for this server.", failure);
+            }
         }
     }
 
@@ -41,6 +45,11 @@ final class PlatformCompat {
     static void setDisplayName(ItemMeta meta, String name) {
         ADAPTER.setDisplayName(meta, name);
     }
+
+    static void setLore(ItemMeta meta, java.util.List<String> lore) { ADAPTER.setLore(meta, lore); }
+    static org.bukkit.inventory.InventoryView openTextEditor(Player player) { return ADAPTER.openTextEditor(player); }
+    static String anvilText(Player player, Inventory inventory) { return ADAPTER.anvilText(player, inventory); }
+    static void freeAnvil(Player player, Inventory inventory) { ADAPTER.freeAnvil(player, inventory); }
 
     static void kick(Player player, String message) {
         ADAPTER.kick(player, message);

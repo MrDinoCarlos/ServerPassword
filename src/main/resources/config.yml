@@ -10,50 +10,186 @@
 
 # ============================================================
 
-# Default language used if player has no preference
-# Available languages en, es, de.
-default-language: "en"
+# ServerPassword 1.0.0
+# AUTOMATIC FILE UPDATES
+# Startup and /spass reload add missing configuration options and translation keys.
+# Existing values, translations, custom keys and user comments are preserved.
+# Editable languages: plugins/ServerPassword/lang/en.yml, es.yml and de.yml.
+# Plaintext passwords are migrated to hashes; existing passwords remain unchanged.
+# The password itself stays the same, and no plaintext backup is created.
+# The complete configuration is validated before it is saved or applied.
 
-# Server Password Numbers + Letters (MAYUSC. ONLY)
-# Check you don´t go over your max password length.
-password: "1234"
+# Fallback language: en, es or de. Players can choose their language in the new menu.
+default-language: "en"
+language:
+  auto-detect: true # Use the client language when the player has no saved preference.
+
+# MODRINTH UPDATES
+# Checks run in the background after startup and every six hours.
+# The console ALWAYS reports the result, compatible updates or connection errors.
+# Only public version information is read; updates are never downloaded or installed.
+# This option controls ONLY the join chat notice for serverpassword.admin players,
+# sent after authentication. false leaves the checker and console notices enabled.
+updates:
+  notify-admins: true
+
+# SERVER PASSWORD
+# A fresh installation has NO password: an empty hash means setup is required.
+# Only administrators can join until setup is complete. They receive a red reminder;
+# the console also shows it at startup and after reload while no password is set.
+# Run /spass set <PIN> in game, or spass set <PIN> in the console, to enable protection.
+# The default policy requires exactly four digits. Leading zeros are preserved.
+# There is no default/example password that grants access.
+# Change it with /spass set <new password> (spaces are supported in MODERN mode).
+# The command generates a hash, updates the metadata and invalidates all sessions.
+# Online players must enter the new password, and remembered sessions are cleared.
+# Do not edit length, numeric or legacy-alphabet to change the password: use the command.
+# Old configurations containing password: "your password" are migrated automatically
+# on startup or reload. Plaintext is replaced by this section without creating backups.
+password:
+  hash: ''
+  length: 0
+  numeric: true
+  # Input character policy supported by LEGACY, not the characters used in the password.
+  # An empty value means this credential requires MODERN text input.
+  legacy-alphabet: "0123456789"
+
+# Policy for the NEXT password set with /spass set. Changing this section does not
+# replace the existing password. Reload the policy, then set the new password.
+# /spass mode PIN|TEXT and /spass length <number> save and apply this policy directly.
+# PIN: digits 0-9 only, with exactly pin-length characters.
+# TEXT: printable text, including spaces; modern-gui.max-length sets the limit.
+# Digit-only passwords always use the keypad and have a hard limit of nine digits.
+# Upgrading an existing installation infers this policy from its saved password.
+password-policy:
+  mode: "PIN"
+  pin-length: 4 # 1-9, limited by the selected interface's maximum length.
 
 # Session settings
-remember-session-minutes: 120 # 0 = always ask every join
+remember-session-minutes: 120 # 0 = ask on every join.
 
-# Timeout settings
+# Authentication timeout, shared by native dialogs, the classic selector and private chat.
 timeout:
   enabled: true
   seconds: 30
-  start-display-at: 25   # Show clock display when 25s remaining (range 0-25s)
-  on-expire: "KICK"      # Action when clock reaches 0 (KICK or REOPEN)
+  start-display-at: 25 # LEGACY clock texture limit. MODERN displays the actual time left.
+  on-expire: "KICK" # KICK disconnects; REOPEN starts a new timeout period.
 
-# On success: SPAWN or LAST_LOCATION
+# Destination after success: SPAWN or LAST_LOCATION.
 success-teleport: "LAST_LOCATION"
 
-# Failed attempts in the same join
+# Failed attempts during the same connection.
 max-attempts-per-join: 3
 attempt-cooldown-seconds: 2
 
-# What happens when max attempts-per-join is reached: KICK or REOPEN
+# Action at the attempt limit: KICK or REOPEN. REOPEN starts another attempt round.
 on-fail-action: "KICK"
 
 ban:
   enabled: true
-  # Counts failures per IP across joins
+  # Counts failures per IP across connections.
   after-total-fails: 5
-  type: "IP" # IP or NAME (IP recommended)
-  duration-seconds: 0 # 0 = permanent
+  type: "IP" # Existing ban behavior uses IP addresses.
+  duration-seconds: 0 # 0 = permanent.
 
 lock:
   freeze-movement: true
   apply-blindness: true
   auth-world: "world"
 
-input-mode: "CODE_GUI"
+# ============================================================
+# LOGIN INTERFACE
+# ============================================================
+# MODERN (default): native login where available; classic PIN selector or private chat otherwise.
+# LEGACY: original arrow-and-head menu, configured in code-gui below.
+# CODE_GUI remains an alias for LEGACY for existing installations.
+# Change this option and run /spass reload to switch interfaces.
+# A rejected reload keeps the previously accepted configuration active.
+input-mode: "MODERN"
+
+modern-gui:
+  title: "&b&lServer Password"
+
+  # AUTO: native dialogs on Paper 1.21.7+ / 26.X with Java 1.21.6+ clients.
+  # On 1.20.X, earlier 1.21 versions or unsupported clients:
+  # PIN passwords use the original up/down head selector, with every digit visible.
+  # TEXT passwords are entered directly in private chat, without an inventory or anvil.
+  # DIALOG: prefer native dialogs, retaining the same fallback when unavailable.
+  # INVENTORY: force compatibility login (classic PIN selector or private text chat).
+  # The 1.20 client has no native dialogs; its fallback retains the login features.
+  # Servers without native dialog support (including versions below Paper 1.21.7)
+  # receive ONE console warning at startup explaining the selector/chat fallback.
+  # Joins, password changes, admin commands and configuration reloads never repeat it.
+  # This compatibility warning is console-only; it is never sent to player chat.
+  # ViaVersion on this server exposes translated clients' actual protocol versions.
+  # If translation happens only on a proxy and the real version is unknown, use INVENTORY.
+  presentation: "AUTO"
+
+  # Native dialogs use a compact 3x4 keypad, a small control row and a separate Confirm.
+  # C clears, ? toggles visibility, and the red X disconnects (tooltips explain each).
+  # More opens visibility, clear, help and language controls. Back returns to login.
+  # The virtual keyboard also includes a red X; text screens show Disconnect directly.
+  # Built-in translations fit the minimum vanilla GUI size without vertical scrolling.
+  # The dialog is NOT rebuilt every second. Only the keypad's two urgency color transitions
+  # refresh its layout; native text fields are never refreshed automatically while typing.
+  # The BossBar shows live remaining time. The dialog's time snapshot refreshes when
+  # a button is pressed, preserving focus, position and unfinished text input.
+
+  # AUTO: keypad for passwords containing only 0-9, text input otherwise.
+  # NUMERIC: force the keypad; passwords containing letters are rejected.
+  # TEXT: direct text entry; digit-only credentials still select the keypad for safety.
+  input: "AUTO"
+  max-length: 32 # 1-128 characters in the native text field or private chat fallback.
+
+  # The keypad uses large filled squares and an underline to make each slot stand out.
+  # The visibility button toggles the code display and the feedback preview.
+  # Minecraft does not provide a native password-type text field.
+  # Native TEXT login opens a visible text field immediately, without an editor submenu.
+  # Physical typing and virtual buttons edit that SAME field, preserving unsent text.
+  # Text in that field is visible, including when the virtual keyboard is expanded.
+  # hide-password-by-default masks keypad slots and noneditable code previews.
+  # Unsupported clients use the classic visible PIN selector or private text chat.
+  # No anvil or virtual keyboard is opened for text login on those clients.
+  hide-password-by-default: true
+  allow-reveal: true
+
+  # TEXT mode: a button expands the virtual keyboard in the login menu.
+  # Native dialogs use QWERTY rows, Aa for case and # for numbers/symbols.
+  # This keyboard is available only in native dialogs, and respects the allowed charset.
+  # Unsupported versions enter text in chat instead. Native buttons need no textures.
+  # Direct typing also accepts printable characters that are not listed here.
+  virtual-keyboard:
+    enabled: true
+    charset: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -_!?@#$%&*+=./:"
+
+  # Native screen close behavior. The classic selector uses code-gui.on-close below.
+  # Switching editors, opening help or revealing the code never resets time or attempts.
+  on-close: "REOPEN"
+
+  countdown:
+    # Shows remaining seconds while a native screen is open.
+    # The classic selector has its original clock; private chat also enforces timeout.
+    # Native text fields are never reopened for countdown ticks, preserving focus and input.
+    bossbar: true
+    warning-seconds: 10 # Orange timer text; vanilla BossBars use their yellow color.
+    critical-seconds: 5 # Red timer text and BossBar; must not exceed warning-seconds.
+    sounds: true # Vanilla ticks accelerate: once/second, twice/second, then four/second.
+
+  feedback:
+    enabled: true
+    duration-ticks: 10 # 1-40 ticks: brief green/red feedback before continuing.
+    sounds: true # Different vanilla sounds for correct and incorrect passwords.
+    shake: true # Brief horizontal code vibration on failure; failed input is then cleared.
+
+# ============================================================
+# ORIGINAL LEGACY GUI. Used for LEGACY/CODE_GUI and as the numeric compatibility fallback.
+# Head textures are preserved for existing menu customizations.
+# Native dialogs do not use heads. The compatibility PIN selector uses these textures.
+# ============================================================
 code-gui:
   max-length: 9 #Max. length of password, range from 1-9.
   charset: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  # Numeric credentials always select digits 0-9 only, retaining leading zeroes.
   title: "&5&lServer Password"
   on-close: "REOPEN" # REOPEN avoids accidental kicks if another plugin/client closes the GUI. KICK restores strict old behavior.
   reopen-delay-ticks: 2
@@ -72,7 +208,7 @@ code-gui:
   #  Tips:
   #   - You can mix numbers and letters freely
   #   - Password length adapts automatically
-  #   - Missing textures will break the GUI
+  #   - Missing or invalid textures fall back to ordinary player heads.
   #
   # ============================================================
 

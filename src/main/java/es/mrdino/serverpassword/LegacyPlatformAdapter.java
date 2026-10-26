@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -31,6 +32,18 @@ final class LegacyPlatformAdapter implements PlatformAdapter {
     @Override
     public void setDisplayName(ItemMeta meta, String name) {
         meta.setDisplayName(name);
+    }
+
+    @Override public void setLore(ItemMeta meta, java.util.List<String> lore) { meta.setLore(lore); }
+    @Override public org.bukkit.inventory.InventoryView openTextEditor(Player player) {
+        return player.openAnvil(null, true);
+    }
+    @Override public String anvilText(Player player, Inventory inventory) {
+        return ((org.bukkit.inventory.AnvilInventory) inventory).getRenameText();
+    }
+    @Override public void freeAnvil(Player player, Inventory inventory) {
+        ((org.bukkit.inventory.AnvilInventory) inventory).setRepairCost(0);
+        ((org.bukkit.inventory.AnvilInventory) inventory).setMaximumRepairCost(Integer.MAX_VALUE);
     }
 
     @Override
@@ -67,17 +80,24 @@ final class LegacyPlatformAdapter implements PlatformAdapter {
     public void applySkullTexture(SkullMeta meta, String textureProperty, URL textureUrl) {
         UUID profileId = UUID.nameUUIDFromBytes(textureProperty.getBytes(StandardCharsets.UTF_8));
         PlayerProfile profile = Bukkit.createPlayerProfile(profileId, "ServerPassword");
-        profile.getTextures().setSkin(textureUrl);
+        var textures = profile.getTextures();
+        textures.setSkin(textureUrl);
+        // Commit the texture data explicitly before assigning the head's owner profile.
+        profile.setTextures(textures);
         meta.setOwnerProfile(profile);
     }
 
     @Override
     public Listener chatListener(LockdownManager lock) {
         return new Listener() {
-            @EventHandler
+            @EventHandler(priority = EventPriority.LOWEST)
             public void onChat(AsyncPlayerChatEvent event) {
                 if (lock.isLocked(event.getPlayer())) {
                     event.setCancelled(true);
+                    String message = event.getMessage();
+                    event.setMessage("");
+                    event.getRecipients().clear();
+                    lock.handleChat(event.getPlayer(), message);
                 }
             }
         };

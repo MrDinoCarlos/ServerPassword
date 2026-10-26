@@ -24,7 +24,7 @@ public class LockdownListener implements Listener {
         if (!lock.isLocked(p)) return;
         lock.ensureTemporaryFlight(p);
 
-        // Permite mirar (yaw/pitch), pero no moverse de bloque
+        // Allow looking around while preventing movement between blocks.
         if (e.getFrom().getBlockX() == e.getTo().getBlockX()
                 && e.getFrom().getBlockY() == e.getTo().getBlockY()
                 && e.getFrom().getBlockZ() == e.getTo().getBlockZ()) {
@@ -63,7 +63,8 @@ public class LockdownListener implements Listener {
 
     @EventHandler
     public void onDamageByEntity(org.bukkit.event.entity.EntityDamageByEntityEvent e) {
-        if (e.getEntity() instanceof org.bukkit.entity.Player p && lock.isLocked(p)) {
+        if ((e.getEntity() instanceof org.bukkit.entity.Player p && lock.isLocked(p))
+                || (e.getDamager() instanceof org.bukkit.entity.Player attacker && lock.isLocked(attacker))) {
             e.setCancelled(true);
         }
     }
@@ -73,6 +74,28 @@ public class LockdownListener implements Listener {
         if (e.getTarget() instanceof org.bukkit.entity.Player p && lock.isLocked(p)) {
             e.setCancelled(true);
         }
+    }
+
+    @EventHandler public void onInventoryClick(org.bukkit.event.inventory.InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof org.bukkit.entity.Player player && lock.isLocked(player)) event.setCancelled(true);
+    }
+    @EventHandler public void onInventoryDrag(org.bukkit.event.inventory.InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof org.bukkit.entity.Player player && lock.isLocked(player)) event.setCancelled(true);
+    }
+    @EventHandler public void onDrop(org.bukkit.event.player.PlayerDropItemEvent event) {
+        if (lock.isLocked(event.getPlayer())) event.setCancelled(true);
+    }
+    @EventHandler public void onPickup(org.bukkit.event.entity.EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof org.bukkit.entity.Player player && lock.isLocked(player)) event.setCancelled(true);
+    }
+    @EventHandler public void onInteract(org.bukkit.event.player.PlayerInteractEvent event) {
+        if (lock.isLocked(event.getPlayer())) event.setCancelled(true);
+    }
+    @EventHandler public void onEntityInteract(org.bukkit.event.player.PlayerInteractEntityEvent event) {
+        if (lock.isLocked(event.getPlayer())) event.setCancelled(true);
+    }
+    @EventHandler public void onSwap(org.bukkit.event.player.PlayerSwapHandItemsEvent event) {
+        if (lock.isLocked(event.getPlayer())) event.setCancelled(true);
     }
 
 }
