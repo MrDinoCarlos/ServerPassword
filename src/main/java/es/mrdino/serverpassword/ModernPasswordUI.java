@@ -12,9 +12,7 @@ import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -26,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.LongSupplier;
-import java.util.function.Consumer;
 
 /** Native login state, with a compatibility callback when dialogs are unavailable. */
 final class ModernPasswordUI implements Listener, PasswordUI {
@@ -42,7 +39,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
     private final Map<String, ItemStack> headTemplates = new HashMap<>();
     private final BukkitTask ticker;
     private final LongSupplier clock;
-    private Consumer<Player> fallback;
     private boolean compatibilityWarningShown;
 
     ModernPasswordUI(JavaPlugin plugin, AuthManager auth, LockdownManager lock, Lang lang) {
@@ -74,8 +70,8 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         if (dialogs == null && !compatibilityWarningShown) {
             compatibilityWarningShown = true;
             plugin.getLogger().warning("Native custom screens require Paper 1.21.7 or newer and a compatible client. "
-                    + "They are unavailable on this server; PIN login will use the classic up/down selector, "
-                    + "and text passwords will be entered privately in chat.");
+                    + "They are unavailable on this server; PIN login will use a masked inventory keypad, "
+                    + "and text passwords will use a masked inventory keyboard. Chat and password commands are disabled.");
         }
     }
 
@@ -83,8 +79,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         return !"INVENTORY".equalsIgnoreCase(plugin.getConfig().getString("modern-gui.presentation", "AUTO"))
                 && dialogs != null && dialogs.supports(player);
     }
-
-    void setFallback(Consumer<Player> fallback) { this.fallback = fallback; }
 
     private int maxLength() {
         int limit = plugin.getConfig().getInt("modern-gui.max-length", 32);
@@ -97,7 +91,7 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         return plugin.getConfig().getString("modern-gui.virtual-keyboard.charset",
                 "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -_!?@#$%&*+=./:");
     }
-    private boolean virtualKeyboard() { return plugin.getConfig().getBoolean("modern-gui.virtual-keyboard.enabled", true); }
+    private boolean virtualKeyboard() { return true; }
 
     @Override public void open(Player player) {
         if (!player.isOnline() || !lock.isLocked(player) || auth.isAuthed(player)) return;
@@ -106,8 +100,7 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         boolean numeric = LoginSettings.numeric(plugin.getConfig(), auth.passwordIsNumeric());
         String presentation = plugin.getConfig().getString("modern-gui.presentation", "AUTO");
         boolean nativeScreen = !"INVENTORY".equalsIgnoreCase(presentation) && dialogs != null && dialogs.supports(player);
-        Session session = new Session(player, new LoginInput(numeric, maxLength(),
-                !plugin.getConfig().getBoolean("modern-gui.hide-password-by-default", true)), nativeScreen);
+        Session session = new Session(player, new LoginInput(numeric, maxLength(), false), nativeScreen);
         session.uppercase = charset().chars().noneMatch(Character::isLowerCase);
         session.symbols = charset().chars().noneMatch(character -> KEYBOARD_LETTERS.indexOf(Character.toLowerCase(character)) >= 0);
         session.deadline = clock.getAsLong() + timeoutSeconds() * 1000L;
@@ -172,11 +165,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
 
     private String timerColor(Session session) { return switch (urgency(session)) { case 2 -> "§c"; case 1 -> "§6"; default -> "§b"; }; }
 
-    private boolean textEntry(Session session) {
-        return session.nativeScreen && !session.input.numeric() && !session.help && !session.options
-                && !session.checking && session.feedback == null;
-    }
-
     private int secondsLeft(Session session) {
         return (int) Math.max(0L, (session.deadline - clock.getAsLong() + 999L) / 1000L);
     }
@@ -187,15 +175,9 @@ final class ModernPasswordUI implements Listener, PasswordUI {
             try { renderDialog(session); return; }
             catch (RuntimeException | LinkageError failure) {
                 session.nativeScreen = false;
-                session.editing = false;
-                plugin.getLogger().log(java.util.logging.Level.WARNING,
-                        "Native login dialog failed; using the classic PIN selector or private text chat for this connection.", failure);
+                plugin.getLogger().warning("Native login dialog failed; using a masked inventory login. Cause: "
+                        + failure.getClass().getSimpleName());
                 dialogs.close(session.player);
-                if (fallback != null) {
-                    forceClose(session.player);
-                    fallback.accept(session.player);
-                    return;
-                }
             }
         }
         renderInventory(session);
@@ -216,16 +198,14 @@ final class ModernPasswordUI implements Listener, PasswordUI {
             lines.add(message(session, "screen-compact-options"));
             lines.add(message(session, "screen-compact-code"));
             lines.add(message(session, timed() ? "screen-compact-meta" : "screen-compact-meta-untimed"));
-            if (plugin.getConfig().getBoolean("modern-gui.allow-reveal", true))
-                button(session, buttons, "REVEAL", session.input.revealed() ? "screen-hide" : "screen-show");
             button(session, buttons, "CLEAR", "gui-clear");
             button(session, buttons, "HELP", "screen-help");
             button(session, buttons, "LANGUAGE", "screen-language");
             compactButton(session, buttons, "EXIT", "screen-compact-disconnect", "screen-exit");
             primary = new NativeLoginScreen.Button("BACK", message(session, "screen-compact-back"));
         } else {
-            lines.add(message(session, session.input.numeric() ? "screen-compact-pin" : "screen-inline-password"));
-            if (!textEntry(session)) lines.add(message(session, "screen-compact-code"));
+            lines.add(message(session, session.input.numeric() ? "screen-compact-pin" : "secure-login-text"));
+            lines.add(message(session, "screen-compact-code"));
             lines.add(message(session, timed() ? "screen-compact-meta" : "screen-compact-meta-untimed"));
             lines.add("screen-ready".equals(session.status) ? " " : message(session, switch (session.status) {
                 case "screen-checking" -> "screen-compact-checking";
@@ -240,9 +220,7 @@ final class ModernPasswordUI implements Listener, PasswordUI {
                 buttons.add(new NativeLoginScreen.Button("DIGIT:0", "§f§l0"));
                 compactButton(session, buttons, "OPTIONS", "screen-compact-more", "screen-compact-options");
                 buttons.add(new NativeLoginScreen.Button("CLEAR", "§cC", message(session, "gui-clear")));
-                buttons.add(new NativeLoginScreen.Button(plugin.getConfig().getBoolean("modern-gui.allow-reveal", true) ? "REVEAL" : "HELP",
-                        "§e?", message(session, plugin.getConfig().getBoolean("modern-gui.allow-reveal", true)
-                        ? session.input.revealed() ? "screen-hide" : "screen-show" : "screen-help")));
+                buttons.add(new NativeLoginScreen.Button("HELP", "§e?", message(session, "screen-help")));
                 buttons.add(new NativeLoginScreen.Button("EXIT", "§cX", message(session, "screen-compact-disconnect")));
             } else if (session.keyboard) {
                 layout = NativeLoginScreen.Layout.KEYBOARD;
@@ -259,7 +237,7 @@ final class ModernPasswordUI implements Listener, PasswordUI {
                 + "§l" + title().replaceAll("(?i)§[0-9a-fk-orx]", "");
         if (session.help) compactButton(session, buttons, "EXIT", "screen-compact-disconnect", "screen-exit");
         dialogs.show(session.player, new NativeLoginScreen.View(heading, lines, buttons, primary, layout,
-                textEntry(session), session.input.value(), maxLength(), session.revision),
+                false, "", maxLength(), session.revision),
                 (action, value) -> handle(session, action, value));
     }
 
@@ -352,7 +330,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
     }
 
     private void renderInventory(Session session) {
-        if (session.editing) return;
         boolean opening = session.inventory == null || session.inventory.getSize() != 54;
         if (opening) session.inventory = PlatformCompat.createInventory(session.player, 54, title());
         session.actions.clear();
@@ -396,8 +373,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
             }
             control(session, 45, Material.BARRIER, "CLEAR", "gui-clear");
             control(session, 46, Material.SHEARS, "BACKSPACE", "screen-backspace");
-            if (plugin.getConfig().getBoolean("modern-gui.allow-reveal", true))
-                control(session, 47, Material.ENDER_EYE, "REVEAL", session.input.revealed() ? "screen-hide" : "screen-show");
             if (!session.input.numeric()) {
                 control(session, 48, Material.NAME_TAG, "TYPE", "screen-type");
                 if (virtualKeyboard()) control(session, 49, Material.COMPARATOR, "KEYBOARD", session.keyboard ? "screen-keyboard-close" : "screen-keyboard");
@@ -439,49 +414,29 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         if ("NONE".equals(action)) return;
         if (action.equals("EXIT")) { PlatformCompat.kick(session.player, message(session, "auth-required")); return; }
         if (session.checking || session.feedback != null) return;
-        // Every button response carries the latest native field, including unsent physical keystrokes.
-        if (textEntry(session) && value != null && !session.input.replace(value)) {
-            session.player.sendMessage(message(session, "screen-invalid-input"));
-            return;
-        }
+        // Ignore response text entirely: only server-defined character buttons supply input.
         session.revision++;
         switch (action) {
             case "TYPE" -> {
                 if (session.input.numeric()) return;
-                if (session.nativeScreen) { render(session); return; }
-                session.editing = true;
-                session.help = false;
-                session.options = false;
-                if (session.nativeScreen) render(session);
-                else openAnvil(session);
+                session.keyboard = true;
+                render(session);
                 return;
-            }
-            case "APPLY" -> {
-                if (!session.input.replace(session.nativeScreen ? value : session.pendingText)) {
-                    session.status = "screen-invalid-input";
-                    session.player.sendMessage(message(session, session.status));
-                    return;
-                }
-                session.editing = false;
-                session.pendingText = null;
             }
             case "BACK" -> {
                 session.help = false;
                 session.options = false;
-                session.editing = false;
             }
-            case "HELP" -> { session.help = !session.help; session.editing = false; }
-            case "OPTIONS" -> { session.options = !session.options; session.help = false; session.editing = false; }
+            case "HELP" -> session.help = !session.help;
+            case "OPTIONS" -> { session.options = !session.options; session.help = false; }
             case "LANGUAGE" -> lang.cycleLanguage(session.player);
             case "REVEAL" -> {
-                if (plugin.getConfig().getBoolean("modern-gui.allow-reveal", true)) session.input.toggleRevealed();
+                // Ignore old or forged reveal actions. Passwords are always masked.
             }
             case "CLEAR" -> session.input.clear();
             case "BACKSPACE" -> session.input.backspace();
             case "KEYBOARD" -> {
                 if (!virtualKeyboard() || session.input.numeric()) return;
-                if (session.editing && !session.nativeScreen) session.input.replace(session.pendingText);
-                session.editing = false;
                 session.options = false;
                 session.keyboard = !session.keyboard;
             }
@@ -536,46 +491,15 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         });
     }
 
-    private void openAnvil(Session session) {
-        session.switching = true;
-        try {
-            InventoryView view = PlatformCompat.openTextEditor(session.player);
-            if (view == null) throw new IllegalStateException("Anvil could not be opened.");
-            session.inventory = view.getTopInventory();
-            session.editorInventory = session.inventory;
-            session.pendingText = session.input.value();
-            session.inventory.setItem(0, item(Material.PAPER, 1, session.input.value().isEmpty() ? " " : session.input.value()));
-            if (virtualKeyboard()) session.inventory.setItem(1, item(Material.BOOK, 1, message(session, "screen-keyboard")));
-            PlatformCompat.freeAnvil(session.player, session.inventory);
-            session.inventory.setItem(2, item(Material.LIME_DYE, 1, message(session, "screen-apply")));
-        } catch (RuntimeException | LinkageError unavailable) {
-            session.editing = false;
-            session.keyboard = true;
-            session.status = "screen-editor-unavailable";
-            plugin.getLogger().warning("Text editor unavailable; using the vanilla virtual keyboard: " + unavailable.getClass().getSimpleName());
-        } finally { session.switching = false; }
-        if (!session.editing) render(session);
-    }
-
-    @EventHandler public void onPrepareAnvil(PrepareAnvilEvent event) {
-        if (!(event.getView().getPlayer() instanceof Player player)) return;
-        Session session = sessions.get(player.getUniqueId());
-        if (session == null || !session.editing || session.inventory != event.getInventory()) return;
-        session.pendingText = PlatformCompat.anvilText(player, event.getInventory());
-        PlatformCompat.freeAnvil(player, event.getInventory());
-        event.setResult(item(Material.LIME_DYE, 1, message(session, "screen-apply")));
-    }
-
     @EventHandler public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         Session session = sessions.get(player.getUniqueId());
         if (session == null || !lock.isLocked(player)) return;
         event.setCancelled(true);
         if (session.inventory != event.getView().getTopInventory() || event.isShiftClick()) return;
-        String action = session.editing ? event.getRawSlot() == 2 ? "APPLY"
-                : event.getRawSlot() == 1 && virtualKeyboard() ? "KEYBOARD" : null : session.actions.get(event.getRawSlot());
+        String action = session.actions.get(event.getRawSlot());
         if (event.getClick() == ClickType.NUMBER_KEY) {
-            action = session.input.numeric() && !session.editing ? "DIGIT:" + (event.getHotbarButton() + 1) : null;
+            action = session.input.numeric() ? "DIGIT:" + (event.getHotbarButton() + 1) : null;
         } else if (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.RIGHT) return;
         if (action == null) return;
         String selected = action;
@@ -592,18 +516,12 @@ final class ModernPasswordUI implements Listener, PasswordUI {
     @EventHandler public void onClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
         Session session = sessions.get(player.getUniqueId());
-        if (session != null && session.editorInventory == event.getInventory()) {
-            // Virtual anvil inputs must never be returned to the real player inventory.
-            session.editorInventory.clear();
-            session.editorInventory = null;
-        }
         if (session == null || session.switching || session.nativeScreen || session.inventory != event.getInventory()) return;
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (sessions.get(player.getUniqueId()) != session || !player.isOnline() || !lock.isLocked(player)) return;
             if ("KICK".equalsIgnoreCase(plugin.getConfig().getString("modern-gui.on-close", "REOPEN"))) {
                 PlatformCompat.kick(player, message(session, "auth-required"));
             } else {
-                session.editing = false;
                 session.revision++;
                 render(session);
             }
@@ -629,7 +547,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
                     session.deadline = clock.getAsLong() + timeoutSeconds() * 1000L;
                 }
                 session.input.clear();
-                session.pendingText = null;
                 session.status = "screen-ready";
                 render(session);
             } else if (session.feedback != null) {
@@ -645,7 +562,7 @@ final class ModernPasswordUI implements Listener, PasswordUI {
                 if ("REOPEN".equalsIgnoreCase(plugin.getConfig().getString("timeout.on-expire", "KICK"))) {
                     session.deadline = clock.getAsLong() + timeoutSeconds() * 1000L;
                     session.status = "screen-ready";
-                    if (!session.editing) render(session);
+                    render(session);
                 } else { PlatformCompat.kick(session.player, message(session, "auth-timeout")); continue; }
             }
             updateBar(session);
@@ -685,9 +602,7 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         Session session = sessions.remove(player.getUniqueId());
         if (session == null) return;
         if (session.bar != null) session.bar.removeAll();
-        if (session.editorInventory != null) session.editorInventory.clear();
         session.input.clear();
-        session.pendingText = null;
         if (dialogs != null && session.nativeScreen) dialogs.close(player);
         if (session.inventory != null && player.isOnline() && player.getOpenInventory().getTopInventory() == session.inventory) player.closeInventory();
     }
@@ -704,7 +619,6 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         boolean nativeScreen;
         final Map<Integer, String> actions = new HashMap<>();
         Inventory inventory;
-        Inventory editorInventory;
         BossBar bar;
         long deadline;
         long revision;
@@ -717,14 +631,12 @@ final class ModernPasswordUI implements Listener, PasswordUI {
         int lastBarSeconds = -1;
         int page;
         boolean keyboard;
-        boolean editing;
         boolean help;
         boolean options;
         boolean uppercase;
         boolean symbols;
         boolean switching;
         boolean checking;
-        String pendingText;
         String status = "screen-ready";
         String lastBarStatus;
         AuthManager.AuthResult lastBarFeedback;

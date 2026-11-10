@@ -1,6 +1,6 @@
-# ServerPassword 1.0.0
+# ServerPassword 1.1.0
 
-Server-wide access protection using a shared password. Includes native dialogs, the original PIN selector, and private chat login on older versions, without resource packs or client mods.
+Server-wide access protection using a shared password. Includes masked native dialogs and inventory keypads/keyboards, without resource packs or client mods. Passwords are never accepted in chat or command arguments.
 
 ## Choose the correct JAR
 
@@ -8,11 +8,11 @@ Install **one JAR** for your server range. Replace the previous plugin file to a
 
 | Server | File |
 | --- | --- |
-| Spigot / Paper 1.20.X | `ServerPassword-1.0.0-1.20.X.jar` |
-| Spigot / Paper 1.21.X | `ServerPassword-1.0.0-1.21.X.jar` |
-| Paper 26.1.X | `ServerPassword-1.0.0-26.1.X.jar` |
-| Paper 26.2.X | `ServerPassword-1.0.0-26.2.X.jar` |
-| Paper 26.3.X | `ServerPassword-1.0.0-26.3.X.jar` |
+| Spigot / Paper 1.20.X | `ServerPassword-1.1.0-1.20.X.jar` |
+| Spigot / Paper 1.21.X | `ServerPassword-1.1.0-1.21.X.jar` |
+| Paper 26.1.X | `ServerPassword-1.1.0-26.1.X.jar` |
+| Paper 26.2.X | `ServerPassword-1.1.0-26.2.X.jar` |
+| Paper 26.3.X | `ServerPassword-1.1.0-26.3.X.jar` |
 
 Minecraft 1.20.5+ and 1.21.X require Java 21; the Paper 26.X JARs require Java 25. The 1.20.X JAR uses Java 17 bytecode for earlier releases in that range. No other plugins are required.
 
@@ -20,41 +20,47 @@ Minecraft 1.20.5+ and 1.21.X require Java 21; the Paper 26.X JARs require Java 2
 
 New installations default to `input-mode: MODERN`.
 
-- `modern-gui.input: AUTO` selects a keypad when the password contains only digits, and text input otherwise.
+- `modern-gui.input: AUTO` selects a keypad when the password contains only digits, and a virtual keyboard otherwise.
 - `NUMERIC` forces the keypad; configuration validation rejects passwords containing letters.
-- `TEXT` opens text entry directly. Digit-only credentials still use the keypad and cannot exceed nine digits.
-- Native text login opens the editable field immediately. Physical typing and an expandable QWERTY keyboard update the same value; button presses preserve unfinished typed text.
-- The password display supports masking/revealing, clearing and backspace.
+- `TEXT` selects the virtual keyboard. Digit-only credentials still use the keypad and cannot exceed nine digits.
+- Passwords stay masked in every screen. There are no editable text fields, anvils, chat prompts or reveal controls, including when old configuration values request them.
+- The virtual keyboard supports case, symbols, clearing and backspace. Its charset must contain every character in the password; extend `modern-gui.virtual-keyboard.charset` before importing a credential that needs additional characters.
 - Results use green feedback on success, or red code vibration followed by clearing on failure, with configurable vanilla sounds.
 - Help, a language selector and a countdown are included. Switching views preserves input, remaining time and attempts.
 
-Native dialogs use a compact **3x4 keypad**, visible PIN slots with filled masks and an underline, a small control row, and a separate Confirm button. More opens secondary controls in their own panel; Back always returns to login. The red X disconnects directly. Text entry uses one editable field and an expandable QWERTY keyboard with case, symbol and disconnect controls. The bundled layouts and translations fit a 320x240 vanilla GUI without vertical scrolling.
+Native dialogs use a compact **3x4 keypad**, masked PIN slots and a separate Confirm button. More opens secondary controls; Back returns to login. The red X disconnects directly. Text entry uses a QWERTY button keyboard. The bundled layouts and translations fit a 320x240 vanilla GUI without vertical scrolling.
 
-The live countdown updates the BossBar without rebuilding a text field. Its in-panel time snapshot refreshes on button presses. At ten seconds the timer turns orange (yellow BossBar), and at five seconds it turns red. The keypad refreshes only at these urgency transitions, not every second. Configurable ticks accelerate from once per second to twice per second, then four times per second in the final three seconds. Warning and critical thresholds are configurable.
+The live countdown updates the BossBar. Its in-panel time snapshot refreshes on button presses. At ten seconds the timer turns orange (yellow BossBar), and at five seconds it turns red. The keypad refreshes only at these urgency transitions, not every second. Configurable ticks accelerate in the final seconds. Warning and critical thresholds are configurable.
 
-`modern-gui.presentation: AUTO` uses native dialogs when Paper and the client support them. Paper's API starts at 1.21.7, and clients need Java Edition 1.21.6 or later. Other combinations use the original up/down selector for numeric credentials, and private chat for text passwords. `INVENTORY` forces this compatibility behavior. `DIALOG` prefers dialogs while retaining the same fallback when capabilities are unavailable.
+`modern-gui.presentation: AUTO` uses native dialogs when Paper and the client support them. Paper's API starts at 1.21.7, and clients need Java Edition 1.21.6 or later. Other combinations use a masked inventory keypad or keyboard. `INVENTORY` forces inventories. `DIALOG` prefers dialogs while retaining the same safe fallback when capabilities are unavailable or rendering fails.
 
 ViaVersion installed on the backend exposes the actual client protocol. If translation occurs only on a proxy and the original version is unknown, select `presentation: INVENTORY`.
 
-Minecraft does not expose a native password-type text field: **the shared editable text field is visible**, including while the virtual keyboard is open. Mask/reveal controls affect native keypad slots and noneditable code previews. Older versions enter text directly in chat, with no inventory, anvil or virtual keyboard.
+Minecraft has no native password-type text field, so editable fields are deliberately not used. On older versions, button-based inventory entry keeps the entered value masked. `/serverpass` without arguments reopens login; secret arguments are rejected. Locked chat is cancelled and is never submitted for verification.
 
-Minecraft 1.20.X and 1.21.4 do not support native dialogs. Numeric passwords use the original menu: an up arrow, a visible digit head and a down arrow for every position, plus clear, attempts, countdown and confirmation controls. Each digit cycles from 0 to 9 and back, retaining leading zeroes. The menu reads the existing `code-gui` custom head textures. Custom heads do not require a resource pack; Minecraft loads their skins normally. The native dialogs do not use head textures.
-
-For text passwords on unsupported versions, a private prompt asks the player to type the password in chat and press Enter. The plugin cancels the chat event, clears its public message and recipients, and verifies the exact text without broadcasting or echoing it. Case, spaces and symbols are preserved. `/serverpass <password>` remains available, including for passwords beginning with `/`. The same hashing, attempts, cooldown, bans, session invalidation and timeout protections apply. A timeout configured as REOPEN starts another chat login period.
-
-When the server's native dialog API is unavailable, ONE console warning at startup explains the Paper 1.21.7+ requirement and the selector/chat fallback. Player joins, password changes and configuration reloads never repeat this warning, and it is never sent to player chat.
+When native dialogs are unavailable, one console warning at startup explains the Paper requirement and masked inventory fallback. Joins and reloads do not repeat it.
 
 ## Original menu
 
-`input-mode: LEGACY` retains the original arrow, letter and head menu configured under `code-gui`. `CODE_GUI` remains a LEGACY alias. Existing installations retain their configured value: change it to MODERN and run `/spass reload` to enable the new interface.
+`input-mode: LEGACY` retains the original arrow selector configured under `code-gui`, but selected characters use neutral masked items rather than revealing their letter or digit textures. `CODE_GUI` remains an alias. MODERN is recommended for direct keypad entry, including on older servers.
 
-LEGACY retains its nine-character limit. The saved `password.legacy-alphabet` policy is checked against its available character set. Numeric passwords always use digits only. The same menu is selected automatically for PIN login on unsupported versions even while MODERN is configured; text login there uses private chat.
+LEGACY retains its nine-character limit. The saved `password.legacy-alphabet` policy is checked against its available character set. Numeric passwords always use digits only. MODERN uses its own masked inventory fallback on unsupported versions.
 
 ## Passwords, validation and sessions
 
-A fresh installation has **no password** (`password.hash: ''`, `password.length: 0`). Until setup is complete, only players with `serverpassword.admin` can join. Administrators receive a red warning after joining, and the console receives the same setup instructions at startup and reload. Other players are disconnected with a setup-pending message.
+A fresh installation has **no password** (`password.hash: ''`, `password.length: 0`). Until setup is complete, only administrators on an online-mode server can join. Offline/proxy backends require the console hash-import flow below for initial setup. Rejected players remain locked if another plugin cancels their kick.
 
-Run `/spass set <PIN>` in game or `spass set <PIN>` in the console. The default policy requires exactly **four digits**, including leading zeros. There is no shared default password. Set `password-policy.pin-length` to change the required length, or `password-policy.mode: TEXT` to accept text passwords; reload, then set the new password. These settings govern the next password change and do not replace the existing credential. Upgrades infer a suitable policy from the saved password.
+Run `/spass set` **without arguments** in game. PIN setup uses a centered number keypad with the original configured digit-head textures, a short inventory title, and a live masked progress bar that distinguishes entry from confirmation. Text setup uses character heads and shows page arrows only when needed. The menu asks for the password twice and clears its buffers on completion, mismatch, close, disconnect or expiry. The default policy requires exactly four digits, including leading zeros. Set `password-policy.pin-length` to change this or select `password-policy.mode: TEXT` for a longer password. Policy settings govern the next change; they do not replace the existing credential.
+
+For console setup, run the standalone tool in a real local terminal, not in the Minecraft console:
+
+```text
+java -jar ServerPassword-PasswordTool.jar password-import.yml
+```
+
+The tool prompts twice with hidden input. It writes only a salted hash and metadata and refuses to overwrite an existing file. Copy that file to `plugins/ServerPassword/password-import.yml`, then run `spass import` in the Minecraft console. A successful import deletes the import file, updates the configuration and invalidates sessions. The build produces the tool in `build/tools`; `java tools/HashPassword.java password-import.yml` is also supported with Java 17+.
+
+Remembered sessions are available only when the backend itself uses online-mode authentication. Offline and proxy backends require the password on every connection, even if a remembered duration is configured; proxy forwarding alone is not treated as proof of a player's identity. Current authorization is tied to the exact player connection. Setting the remembered duration to zero prevents old remembered sessions being restored.
 
 ## Administration commands
 
@@ -66,7 +72,8 @@ All `/spass` subcommands require `serverpassword.admin` (operators by default) a
 | `/spass mode PIN` or `/spass mode TEXT` | Select the policy for the next password change. |
 | `/spass length 6` | In PIN mode, require exactly 1–9 digits for the next `/spass set`. In TEXT mode, change the text input maximum. |
 | `/spass max-length 64` | Set the MODERN text input maximum, between 1 and 128. |
-| `/spass set <password>` | Set the password and require authentication again. Spaces are supported in TEXT mode. |
+| `/spass set` | Open masked password creation and confirmation. Requires an authenticated administrator. |
+| `spass import` (console only) | Import `password-import.yml` generated locally using hidden input. |
 | `/spass gui MODERN` or `/spass gui LEGACY` | Switch the login interface. |
 | `/spass presentation AUTO` | Select AUTO, DIALOG or INVENTORY presentation. |
 | `/spass input AUTO` | Select AUTO, TEXT or NUMERIC; digit-only credentials always use the keypad. |
@@ -77,15 +84,21 @@ All `/spass` subcommands require `serverpassword.admin` (operators by default) a
 | `/spass notify-admins OFF` | Disable admin update chat notices; console checking remains enabled. |
 | `/spass reload` | Reload configuration and language files. |
 
-Changes are validated, saved and applied immediately. Invalid changes preserve the accepted configuration and file. Policy changes do not replace an existing hashed password: use `/spass set` afterward. Example: `/spass mode PIN`, `/spass length 6`, then `/spass set <your six digits>`. Numeric passwords longer than nine digits are rejected even under TEXT policy.
+Changes are validated, saved and applied immediately. Invalid changes preserve the accepted configuration and file. Policy changes do not replace the password: use `/spass set` afterward. Example: `/spass mode PIN`, `/spass length 6`, then `/spass set` to enter six digits in the menu. Numeric passwords longer than nine digits are rejected even under TEXT policy.
 
 Only a salted PBKDF2-SHA256 hash with 600000 iterations is stored after setup.
 
-Use `/spass set <new password>` to change it. Hashing runs in the background. The command updates credential metadata and requires connected players to authenticate again. Remembered sessions for offline players are invalidated as well. Pending checks for the old credential are discarded.
+Use `/spass set` to change it. Hashing runs in the background. Concurrent changes are rejected until the pending change finishes. Credential changes require connected players to authenticate again and invalidate remembered sessions and pending checks for the old credential.
 
 Older plaintext configurations are migrated automatically, preserving the password and replacing plaintext with its hash. No plaintext backup is created. Use the command rather than manually changing the hash, length or character policy so the metadata stays consistent.
 
-Settings are validated before they are saved or applied. Rejected reloads preserve the active settings; invalid configuration at startup prevents the plugin from enabling. `/spass reload` applies interface, configuration and translation changes.
+Settings are validated before they are saved or applied. Rejected configuration reloads preserve the active settings. If startup validation or protection initialization fails, admission remains closed and the server stops instead of continuing without password protection. Enabling the plugin with players already online requires those players to authenticate as well.
+
+## Password privacy boundaries
+
+Supported input flows never put the entered password in command arguments, chat messages, GUI labels or native text fields. A server-wide Log4j filter drops obsolete password-command log records before appenders receive them, including namespaced variants. Failure to install that protection stops startup. Existing historical logs are not rewritten: rotate a password previously used with a plaintext command.
+
+Only a one-way salted PBKDF2 hash is stored, rather than reversible encryption. A plugin cannot hide a password or reconstructible keystrokes from someone controlling the client, server process, malicious plugins or an unencrypted network connection. Use authenticated, encrypted connections and secure any proxy/backend transport. Offline-mode Minecraft does not gain transport encryption from this plugin. Choose a long text password when hash disclosure is a concern; a four-digit PIN has only 10,000 possibilities.
 
 ## Automatic file updates
 
@@ -97,15 +110,21 @@ Language detection uses the client locale and falls back to `default-language`. 
 
 ## Modrinth updates
 
-The checker reads public versions at startup and every six hours, filtering for the server's Minecraft version and platform. Check results and connection errors are always reported in the console.
+The checker reads public versions **at startup and then every 24 hours**, filtering for the server's Minecraft version and platform. Each check reports its result or connection error once in the console. Failed checks wait until the next daily run rather than retrying immediately. Player joins and `/spass reload` do not query Modrinth; administrator join notices reuse the cached result.
 
 `updates.notify-admins: false` disables **only the join chat notice** for authenticated players with `serverpassword.admin`. The checker and console reporting remain enabled. Updates are never downloaded or installed automatically.
 
 ## Build and verification
 
+Paper 26.3 distinguishes the explicit invulnerability flag from immunity while a client loads or uses a protected game mode. Login snapshots use the explicit flag and restore it on authentication or disconnect, preserving protection that already existed before login.
+
+For players affected by an older build, an authenticated administrator can use `/spass repairprotection [player]` to remove the existing permanent invulnerability flag. Omitting the name repairs the administrator's own player; console use requires an online player name. This is an explicit repair and does not reset inventories, profiles, flight or potion effects.
+
+`gradlew.bat authProtectionProbeJar` builds a separate Paper 26.3 regression plugin in `build/integration/tools`. Use it only in a loopback fixture started with `-Dperplayerprofiles.integration=local-smoke`. It checks client-loading immunity, creative mode, damage frames, preexisting explicit protection, native enemy targetability and authenticated repair, then stops that fixture. It is never included in the runtime plugin JARs.
+
 Run `gradlew.bat build` on Windows or `./gradlew build` elsewhere. Java 17, 21 and 25 toolchains are needed; Gradle can obtain them through the configured resolver.
 
-The build compiles the common implementation against 1.20.1, the dialog adapter against 1.21.7, and each Paper 26 variant against its own API. Tests run as part of the build, producing five JARs in `build/libs`, each containing its matching `plugin.yml` and license. The complete source archive is written to `build/distributions/ServerPassword-1.0.0-sources.zip`. Tests cover input flows, first-time setup, hashing, session invalidation, migration, settings preservation and version comparison.
+The build compiles the common implementation against 1.20.1, the dialog adapter against 1.21.7, and each Paper 26 variant against its own API. Tests run as part of the build, producing five JARs in `build/libs`, each containing its matching `plugin.yml` and license. The complete source archive is written to `build/distributions/ServerPassword-1.1.0-sources.zip`. Tests cover input flows, first-time setup, hashing, session invalidation, migration, settings preservation and version comparison.
 
 To check native dialog construction against Paper's real implementation, also supply an extracted Paper 26.3 server JAR: `gradlew.bat build "-PpaperServerJar=C:/server/versions/26.3/paper-26.3.jar"`. These checks run with Java 25 and reproduce Paper's dialog validation, including its pause/after-action constraint. This reads the JAR without starting or changing the server. Visual verification with a Minecraft client is a separate check.
 

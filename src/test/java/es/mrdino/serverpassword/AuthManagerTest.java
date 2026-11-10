@@ -22,13 +22,16 @@ import static org.mockito.Mockito.*;
 class AuthManagerTest {
     private AuthManager auth;
     private Player player;
+    private Server server;
+    private org.bukkit.configuration.file.YamlConfiguration config;
     private final BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
 
     @BeforeEach void setup() {
-        var config = PasswordSecurityTest.defaults();
+        config = PasswordSecurityTest.defaults();
         config.set("ban.enabled", false);
         JavaPlugin plugin = mock(JavaPlugin.class);
-        Server server = mock(Server.class);
+        server = mock(Server.class);
+        when(server.getOnlineMode()).thenReturn(true);
         BukkitScheduler scheduler = mock(BukkitScheduler.class);
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.isEnabled()).thenReturn(true);
@@ -45,6 +48,38 @@ class AuthManagerTest {
     }
 
     @AfterEach void cleanup() { auth.shutdown(); }
+
+    @Test void offlineAndProxyBackendsNeverRestoreRememberedUuidSessions() {
+        auth.markAuthed(player);
+        auth.clearSession(player);
+        when(server.getOnlineMode()).thenReturn(false);
+        Player impostor = mock(Player.class);
+        UUID id = player.getUniqueId();
+        when(impostor.getUniqueId()).thenReturn(id);
+        assertFalse(auth.beginJoin(impostor));
+        assertFalse(auth.isAuthed(impostor));
+        auth.markAuthed(player);
+        assertTrue(auth.isAuthed(player), "Entering the password still authorizes this offline connection");
+        assertFalse(auth.isAuthed(impostor), "A different Player with the same UUID cannot inherit current authorization");
+        auth.clearSession(player);
+        assertFalse(auth.beginJoin(player));
+    }
+
+    @Test void anUnconfiguredOfflineServerCannotTrustAnImpersonatedAdministrator() {
+        when(server.getOnlineMode()).thenReturn(false);
+        auth.updateCredential(PasswordCredential.read(PasswordSecurityTest.freshDefaults()));
+        when(player.hasPermission("serverpassword.admin")).thenReturn(true);
+        assertFalse(auth.isAuthed(player));
+        assertFalse(auth.beginJoin(player));
+    }
+
+    @Test void disablingRememberingImmediatelyRevokesStoredReconnectSessions() {
+        auth.markAuthed(player);
+        auth.clearSession(player);
+        config.set("remember-session-minutes", 0);
+        auth.updateCredential(PasswordCredential.read(config));
+        assertFalse(auth.beginJoin(player));
+    }
 
     @Test void noPasswordAllowsOnlyAdministratorsWithoutCreatingASession() {
         auth.updateCredential(PasswordCredential.read(PasswordSecurityTest.freshDefaults()));

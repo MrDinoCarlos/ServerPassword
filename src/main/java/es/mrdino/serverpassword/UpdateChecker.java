@@ -19,8 +19,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Only reads public version metadata; never downloads or installs a JAR. */
+/** Checks at startup and every 24 hours; join notices reuse the cached result. */
 final class UpdateChecker implements Listener {
+    static final long CHECK_INTERVAL_TICKS = 24L * 60 * 60 * 20;
     private final JavaPlugin plugin;
     private final AuthManager auth;
     private final LockdownManager lock;
@@ -51,7 +52,7 @@ final class UpdateChecker implements Listener {
         loaders = name.contains("paper") || name.contains("purpur") || name.contains("folia")
                 ? Set.of("paper", "spigot", "bukkit") : Set.of("spigot", "bukkit");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        checkTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::check, 40L, 6L * 60 * 60 * 20);
+        checkTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::check, 40L, CHECK_INTERVAL_TICKS);
         notifyTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::notifyPending, 60L, 20L);
     }
 

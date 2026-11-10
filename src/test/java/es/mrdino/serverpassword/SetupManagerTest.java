@@ -40,6 +40,7 @@ class SetupManagerTest {
         when(admin.isOnline()).thenReturn(true);
         when(admin.hasPermission("serverpassword.admin")).thenReturn(true);
         auth = mock(AuthManager.class);
+        when(auth.isAuthed(admin)).thenReturn(true);
         Lang lang = mock(Lang.class);
         when(lang.msg(any(CommandSender.class), anyString())).thenAnswer(call -> call.getArgument(1));
         when(lang.tr(any(CommandSender.class), anyString())).thenAnswer(call -> call.getArgument(1));
@@ -53,7 +54,7 @@ class SetupManagerTest {
     @Test void consoleReceivesTheCommandAndConfiguredPinLength() {
         setup.warnConsole();
         verify(console).sendMessage("setup-warning");
-        verify(console).sendMessage("setup-command-pin:4");
+        verify(console).sendMessage("secure-setup-console");
         verify(console).sendMessage("setup-policy");
     }
 
@@ -63,7 +64,7 @@ class SetupManagerTest {
         assertNotNull(delayedWarning);
         delayedWarning.run();
         verify(admin).sendMessage("setup-warning");
-        verify(admin).sendMessage("setup-command-pin:4");
+        verify(admin).sendMessage("secure-setup-pin:4");
         setup.onJoin(admin);
         when(auth.isPasswordConfigured()).thenReturn(true);
         delayedWarning.run();

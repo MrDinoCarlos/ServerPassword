@@ -18,6 +18,40 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class UpdateCheckerTest {
+    @Test void startupAndDailyChecksAreScheduledWhileJoinsOnlyReuseCachedResults() throws Exception {
+        Fixture fixture = new Fixture(true);
+        verify(fixture.scheduler).runTaskTimerAsynchronously(eq(fixture.plugin), any(Runnable.class), eq(40L), eq(1_728_000L));
+        verify(fixture.scheduler, never()).runTaskLaterAsynchronously(any(), any(Runnable.class), anyLong());
+        verifyNoInteractions(fixture.source);
+        fixture.check.run();
+        when(fixture.auth.isAuthed(fixture.player)).thenReturn(true);
+        for (int join = 0; join < 4; join++) {
+            PlayerJoinEvent event = mock(PlayerJoinEvent.class);
+            when(event.getPlayer()).thenReturn(fixture.player);
+            fixture.checker.onJoin(event);
+            fixture.notifier.run();
+            fixture.notifier.run();
+        }
+        verify(fixture.source, times(1)).read("1.0.0");
+        verify(fixture.logger, times(1)).info(anyString());
+        fixture.check.run(); // Scheduler's next run, after 24 hours.
+        verify(fixture.source, times(2)).read("1.0.0");
+        verify(fixture.logger, times(2)).info(anyString());
+        fixture.checker.shutdown();
+    }
+
+    @Test void aFailedCheckWaitsForTheNextDailyRunWithoutImmediateRetries() throws Exception {
+        Fixture fixture = new Fixture(true);
+        when(fixture.source.read(anyString())).thenThrow(new java.io.IOException("Fixture connection failure"));
+        fixture.check.run();
+        for (int tick = 0; tick < 4; tick++) fixture.notifier.run();
+        verify(fixture.source, times(1)).read("1.0.0");
+        verify(fixture.logger, times(1)).warning(contains("IOException"));
+        verify(fixture.scheduler, times(1)).runTaskTimerAsynchronously(eq(fixture.plugin), any(Runnable.class), eq(40L), eq(1_728_000L));
+        verify(fixture.scheduler, never()).runTaskLaterAsynchronously(any(), any(Runnable.class), anyLong());
+        fixture.checker.shutdown();
+    }
+
     @Test void disablingChatDoesNotDisableTheCheckerOrConsoleNotice() {
         Fixture fixture = new Fixture(false);
         fixture.check.run();
@@ -42,6 +76,9 @@ class UpdateCheckerTest {
         final Player player = mock(Player.class);
         final AuthManager auth = mock(AuthManager.class);
         final Logger logger = mock(Logger.class);
+        final JavaPlugin plugin = mock(JavaPlugin.class);
+        final BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        final UpdateChecker.VersionSource source = mock(UpdateChecker.VersionSource.class);
         final UpdateChecker checker;
         Runnable check;
         Runnable notifier;
@@ -49,9 +86,7 @@ class UpdateCheckerTest {
         Fixture(boolean notify) {
             var config = PasswordSecurityTest.defaults();
             config.set("updates.notify-admins", notify);
-            JavaPlugin plugin = mock(JavaPlugin.class);
             Server server = mock(Server.class);
-            BukkitScheduler scheduler = mock(BukkitScheduler.class);
             UUID id = UUID.randomUUID();
             when(player.getUniqueId()).thenReturn(id);
             when(player.isOnline()).thenReturn(true);
@@ -77,9 +112,12 @@ class UpdateCheckerTest {
             });
             Lang lang = mock(Lang.class);
             when(lang.msg(eq(player), eq("update-available"), anyMap())).thenReturn("UPDATE");
-            checker = new UpdateChecker(plugin, auth, mock(LockdownManager.class), lang, version -> JsonParser.parseString("""
-                    [{"id":"new","version_number":"1.1.0","game_versions":["1.20.1"],"loaders":["paper"]}]
-                    """).getAsJsonArray());
+            try {
+                when(source.read(anyString())).thenReturn(JsonParser.parseString("""
+                        [{"id":"new","version_number":"1.1.0","game_versions":["1.20.1"],"loaders":["paper"]}]
+                        """).getAsJsonArray());
+            } catch (Exception impossible) { throw new AssertionError(impossible); }
+            checker = new UpdateChecker(plugin, auth, mock(LockdownManager.class), lang, source);
             PlayerJoinEvent join = mock(PlayerJoinEvent.class);
             when(join.getPlayer()).thenReturn(player);
             checker.onJoin(join);

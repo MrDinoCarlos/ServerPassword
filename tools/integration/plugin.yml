@@ -1,0 +1,5 @@
+name: AuthProtectionProbe
+version: 1.0
+main: AuthProtectionProbe
+api-version: '1.20'
+depend: [ServerPassword]

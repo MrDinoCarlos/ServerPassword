@@ -26,6 +26,7 @@ class AdminCommandTest {
 
     @BeforeEach void setup() throws Exception {
         plugin = mock(ServerPassPlugin.class);
+        when(plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
         var config = PasswordSecurityTest.defaults();
         var field = ServerPassPlugin.class.getDeclaredField("acceptedConfig");
         field.setAccessible(true);
@@ -112,7 +113,7 @@ class AdminCommandTest {
         assertEquals(List.of("TEXT"), executor.onTabComplete(admin, command, "spass", new String[]{"mode", "t"}));
         assertEquals(9, executor.onTabComplete(admin, command, "spass", new String[]{"length", ""}).size());
         assertEquals(List.of(), executor.onTabComplete(admin, command, "spass", new String[]{"set", ""}));
-        var login = new ServerPassCommand(plugin, mock(AuthManager.class), mock(LockdownManager.class), mock(Lang.class));
+        var login = new ServerPassCommand(plugin, mock(Lang.class));
         assertEquals(List.of(), login.onTabComplete(admin, command, "serverpass", new String[]{""}));
         when(admin.hasPermission("serverpassword.admin")).thenReturn(false);
         assertEquals(List.of(), executor.onTabComplete(admin, command, "spass", new String[]{""}));
@@ -120,12 +121,44 @@ class AdminCommandTest {
         assertEquals("PIN", plugin.getConfig().getString("password-policy.mode"));
     }
 
-    @Test void passwordCommandPreservesSpacesAndDoesNotEchoTheSecret() {
-        doAnswer(call -> { ((Consumer<List<String>>) call.getArgument(1)).accept(List.of()); return null; })
-                .when(plugin).changePassword(anyString(), any());
+    @Test void passwordCommandRejectsSecretArgumentsAndUsesTheMaskedSetupMenu() {
         run("set", "A", "text", "password!");
-        verify(plugin).changePassword(eq("A text password!"), any());
-        verify(admin).sendMessage("admin-password-set");
+        verify(plugin, never()).changePassword(anyString(), any());
+        verify(admin).sendMessage("secure-input-only");
         verify(admin, never()).sendMessage(contains("A text password!"));
+        run("set");
+        verify(plugin).openPasswordSetup(admin);
+    }
+
+    @Test void loginCommandOnlyOpensTheMenuAndNeverAcceptsSecretArguments() {
+        var player = mock(org.bukkit.entity.Player.class);
+        Lang messages = mock(Lang.class);
+        when(messages.msg(any(), anyString())).thenAnswer(call -> call.getArgument(1));
+        var login = new ServerPassCommand(plugin, messages);
+        login.onCommand(player, command, "serverpass", new String[]{"secret-never-echo"});
+        verify(plugin, never()).openLogin(any());
+        verify(player).sendMessage("secure-input-only");
+        verify(player, never()).sendMessage(contains("secret-never-echo"));
+        login.onCommand(player, command, "serverpass", new String[]{});
+        verify(plugin).openLogin(player);
+    }
+
+    @Test void protectionRepairIsExplicitPermissionCheckedAndOffersOnlineTargets() {
+        var player = mock(org.bukkit.entity.Player.class);
+        when(player.getName()).thenReturn("Owner");
+        try (var bukkit = mockStatic(org.bukkit.Bukkit.class)) {
+            bukkit.when(() -> org.bukkit.Bukkit.getPlayerExact("Owner")).thenReturn(player);
+            bukkit.when(org.bukkit.Bukkit::getOnlinePlayers).thenReturn(List.of(player));
+            assertEquals(List.of("Owner"), executor.onTabComplete(admin, command, "spass", new String[]{"repairprotection", "O"}));
+            run("repairprotection"); verify(admin).sendMessage("admin-protection-usage");
+            run("repairprotection", "Missing"); verify(admin).sendMessage("admin-player-offline");
+            run("repairprotection", "Owner"); verify(admin).sendMessage("admin-player-locked");
+            when(plugin.repairProtection(player)).thenReturn(true);
+            run("repairprotection", "Owner"); verify(admin).sendMessage("admin-protection-repaired");
+            when(admin.hasPermission("serverpassword.admin")).thenReturn(false);
+            run("repairprotection", "Owner");
+            verify(plugin, times(2)).repairProtection(player);
+            verify(admin).sendMessage("admin-no-permission");
+        }
     }
 }

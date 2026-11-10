@@ -10,8 +10,8 @@ import java.util.Map;
 import java.util.stream.IntStream;
 
 public class AdminCommand implements TabExecutor {
-    private static final List<String> COMMANDS = List.of("help", "settings", "set", "mode", "length", "max-length",
-            "gui", "presentation", "input", "timeout", "attempts", "cooldown", "remember", "notify-admins", "reload");
+    private static final List<String> COMMANDS = List.of("help", "settings", "set", "import", "mode", "length", "max-length",
+            "gui", "presentation", "input", "timeout", "attempts", "cooldown", "remember", "notify-admins", "repairprotection", "reload");
     private final ServerPassPlugin plugin;
     private final Lang lang;
 
@@ -29,15 +29,30 @@ public class AdminCommand implements TabExecutor {
         }
 
         if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            sender.sendMessage(lang.msg(sender, "admin-help-1"));
+            sender.sendMessage(lang.msg(sender, "admin-secure-help"));
             sender.sendMessage(lang.msg(sender, "admin-help-2"));
             sender.sendMessage(lang.msg(sender, "admin-help-policy"));
             sender.sendMessage(lang.msg(sender, "admin-help-interface"));
             sender.sendMessage(lang.msg(sender, "admin-help-limits"));
+            sender.sendMessage(lang.msg(sender, "admin-help-protection"));
             return true;
         }
 
         String subcommand = args[0].toLowerCase(Locale.ROOT);
+        if (subcommand.equals("repairprotection")) {
+            if (args.length > 2 || args.length == 1 && !(sender instanceof org.bukkit.entity.Player)) {
+                sender.sendMessage(lang.msg(sender, "admin-protection-usage")); return true;
+            }
+            org.bukkit.entity.Player target = args.length == 2 ? org.bukkit.Bukkit.getPlayerExact(args[1])
+                    : (org.bukkit.entity.Player) sender;
+            if (target == null) { sender.sendMessage(lang.msg(sender, "admin-player-offline")); return true; }
+            if (!plugin.repairProtection(target)) {
+                sender.sendMessage(lang.msg(sender, "admin-player-locked")); return true;
+            }
+            sender.sendMessage(lang.msg(sender, "admin-protection-repaired", Map.of("player", target.getName())));
+            plugin.getLogger().info("Protection repair requested by " + sender.getName() + " for " + target.getName());
+            return true;
+        }
         if (subcommand.equals("settings")) {
             var config = plugin.getConfig();
             sender.sendMessage(lang.msg(sender, "admin-settings-policy", Map.of(
@@ -63,15 +78,19 @@ public class AdminCommand implements TabExecutor {
             return true;
         }
 
-        if (args[0].equalsIgnoreCase("set") && args.length >= 2) {
-            String password = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length));
-            plugin.changePassword(password, errors -> {
-                if (errors.isEmpty()) sender.sendMessage(lang.msg(sender, "admin-password-set"));
-                else {
-                    sender.sendMessage(lang.msg(sender, "admin-invalid-config"));
-                    errors.forEach(error -> sender.sendMessage("§c" + error));
-                }
-            });
+        if (subcommand.equals("set")) {
+            if (args.length != 1) sender.sendMessage(lang.msg(sender, "secure-input-only"));
+            else plugin.openPasswordSetup(sender);
+            return true;
+        }
+
+        if (subcommand.equals("import")) {
+            if (args.length != 1 || !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+                sender.sendMessage(lang.msg(sender, "secure-setup-console")); return true;
+            }
+            var errors = plugin.importPassword();
+            sender.sendMessage(lang.msg(sender, errors.isEmpty() ? "admin-password-set" : "admin-invalid-config"));
+            errors.forEach(error -> sender.sendMessage("§c" + error));
             return true;
         }
 
@@ -146,6 +165,7 @@ public class AdminCommand implements TabExecutor {
             case "cooldown" -> List.of("0", "1", "2", "5");
             case "remember" -> List.of("0", "30", "60", "120");
             case "notify-admins" -> List.of("ON", "OFF");
+            case "repairprotection" -> org.bukkit.Bukkit.getOnlinePlayers().stream().map(org.bukkit.entity.Player::getName).toList();
             default -> List.of();
         };
         String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);

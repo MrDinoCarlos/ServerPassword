@@ -13,7 +13,7 @@ softdepend:
 commands:
   serverpass:
     description: Enter the server password
-    usage: /serverpass <password>
+    usage: /serverpass
   spass:
     description: Admin commands for ServerPassword
     usage: /spass help

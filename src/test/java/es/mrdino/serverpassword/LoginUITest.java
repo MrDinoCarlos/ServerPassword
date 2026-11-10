@@ -75,7 +75,10 @@ class LoginUITest {
         selector = mock(Inventory.class);
         when(selector.getSize()).thenReturn(54);
         platform.when(() -> PlatformCompat.createInventory(any(), eq(54), anyString())).thenReturn(selector);
-        items = mockConstruction(ItemStack.class, (item, context) -> when(item.getItemMeta()).thenReturn(mock(ItemMeta.class)));
+        items = mockConstruction(ItemStack.class, (item, context) -> {
+            when(item.getItemMeta()).thenReturn(mock(ItemMeta.class));
+            when(item.clone()).thenReturn(item);
+        });
         skulls = mockStatic(SkullUtil.class);
         skulls.when(() -> SkullUtil.headFromTexture(anyString())).thenAnswer(call -> new ItemStack(Material.PLAYER_HEAD));
         player = mock(Player.class);
@@ -105,9 +108,9 @@ class LoginUITest {
     private void drain() { while (!tasks.isEmpty()) tasks.remove().run(); }
 
     private void click(int slot) throws Exception {
-        var field = LoginUI.class.getDeclaredField("legacy");
+        var field = LoginUI.class.getDeclaredField("modern");
         field.setAccessible(true);
-        CodePasswordUI legacy = (CodePasswordUI) field.get(ui);
+        ModernPasswordUI modern = (ModernPasswordUI) field.get(ui);
         InventoryClickEvent event = mock(InventoryClickEvent.class);
         InventoryView view = mock(InventoryView.class);
         when(view.getTopInventory()).thenReturn(selector);
@@ -115,10 +118,11 @@ class LoginUITest {
         when(event.getWhoClicked()).thenReturn(player);
         when(event.getClick()).thenReturn(ClickType.LEFT);
         when(event.getRawSlot()).thenReturn(slot);
-        legacy.onClick(event);
+        modern.onClick(event);
+        drain();
     }
 
-    @Test void unsupportedNumericClientsUseTheOriginalUpDownSelectorWithVisibleDigits() throws Exception {
+    @Test void unsupportedNumericClientsUseAMaskedKeypadWithLeadingZeroes() throws Exception {
         screen.supported = false;
         plugin.getConfig().set("modern-gui.input", "TEXT");
         plugin.getConfig().set("code-gui.charset", "ABC");
@@ -127,49 +131,44 @@ class LoginUITest {
         drain();
         assertNull(screen.view);
         verify(player).openInventory(selector);
-        for (int column = 2; column < 6; column++) {
-            verify(selector, atLeastOnce()).setItem(eq(9 + column), any(ItemStack.class));
-            verify(selector, atLeastOnce()).setItem(eq(18 + column), any(ItemStack.class));
-            verify(selector, atLeastOnce()).setItem(eq(27 + column), any(ItemStack.class));
-        }
-        platform.verify(() -> PlatformCompat.setDisplayName(any(), eq("§b§l0")), atLeast(4));
-        for (int index = 0; index < 10; index++) click(11);
+        for (int slot : new int[]{12, 13, 14, 21, 22, 23, 30, 31, 32, 40})
+            verify(selector, atLeastOnce()).setItem(eq(slot), any(ItemStack.class));
+        platform.verify(() -> PlatformCompat.setDisplayName(any(), eq("§b§l0")), never());
+        click(40); click(40); click(12); click(13);
         click(53);
-        verify(auth).tryPasswordAsync(eq(player), eq("0000"), any());
-        click(29);
-        click(53);
-        verify(auth).tryPasswordAsync(eq(player), eq("9000"), any());
+        verify(auth).tryPasswordAsync(eq(player), eq("0012"), any());
     }
 
-    @Test void serversWithoutDialogApiUseChatForTextWithoutAnyInventoryOrAnvil() {
+    @Test void serversWithoutDialogApiUseAMaskedTextKeyboardAndNeverAcceptChatPasswords() {
         when(auth.passwordIsNumeric()).thenReturn(false);
         ui = new LoginUI(plugin, auth, lock, lang, null);
         ui.open(player);
         drain();
-        verify(player).sendMessage("chat-login-prompt");
-        verify(player, never()).openInventory(any(Inventory.class));
+        verify(player, never()).sendMessage("chat-login-prompt");
+        verify(player).openInventory(selector);
         verify(player, never()).openAnvil(any(), anyBoolean());
-        platform.verify(() -> PlatformCompat.createInventory(any(), anyInt(), anyString()), never());
-        assertTrue(ui.handleChat(player, "Text password!"));
+        assertFalse(ui.handleChat(player, "Text password!"));
         drain();
-        verify(auth).tryPasswordAsync(eq(player), eq("Text password!"), any());
+        verify(auth, never()).tryPasswordAsync(any(), anyString(), any());
     }
 
-    @Test void oldClientsOnModernServersAlsoUsePrivateChatForText() {
+    @Test void oldClientsOnModernServersAlsoUseTheMaskedInventoryForText() {
         when(auth.passwordIsNumeric()).thenReturn(false);
         screen.supported = false;
         ui = new LoginUI(plugin, auth, lock, lang, screen);
         ui.open(player);
         assertNull(screen.view);
-        verify(player).sendMessage("chat-login-prompt");
+        verify(player, never()).sendMessage("chat-login-prompt");
+        verify(player).openInventory(selector);
         verify(logger, never()).warning(anyString());
     }
 
-    @Test void compatibleClientsRetainTheNativeTextFieldAndVirtualKeyboard() {
+    @Test void compatibleClientsUseTheVirtualKeyboardWithoutAnExposedNativeTextField() {
         when(auth.passwordIsNumeric()).thenReturn(false);
         ui = new LoginUI(plugin, auth, lock, lang, screen);
         ui.open(player);
-        assertTrue(screen.view.textEntry());
+        assertFalse(screen.view.textEntry());
+        assertEquals("", screen.view.initialText());
         assertTrue(screen.view.buttons().stream().anyMatch(button -> button.action().equals("KEYBOARD")));
         verify(player, never()).sendMessage("chat-login-prompt");
         assertFalse(ui.handleChat(player, "normal message"));
@@ -198,13 +197,13 @@ class LoginUITest {
         verify(player, never()).openInventory(selector);
     }
 
-    @Test void nativeRenderingFailureUsesChatRatherThanAnAnvilForText() {
+    @Test void nativeRenderingFailureKeepsTextInputInAMaskedInventory() {
         screen.fail = true;
         when(auth.passwordIsNumeric()).thenReturn(false);
         ui = new LoginUI(plugin, auth, lock, lang, screen);
         ui.open(player);
-        verify(player).sendMessage("chat-login-prompt");
-        verify(player, never()).openInventory(any(Inventory.class));
+        verify(player, never()).sendMessage("chat-login-prompt");
+        verify(player).openInventory(selector);
         verify(player, never()).openAnvil(any(), anyBoolean());
     }
 

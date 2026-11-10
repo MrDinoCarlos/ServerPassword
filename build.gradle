@@ -1,7 +1,7 @@
 plugins { id 'java' }
 
 group = 'es.mrdino'
-version = '1.0.0'
+version = '1.1.0'
 
 repositories {
     mavenCentral()
@@ -24,6 +24,8 @@ dependencies {
     testImplementation 'io.papermc.paper:paper-api:1.20.1-R0.1-SNAPSHOT'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testImplementation 'org.mockito:mockito-core:5.14.2'
+    // Tests the server-wide log filter; never bundled into runtime plugin JARs.
+    testImplementation 'org.apache.logging.log4j:log4j-core:2.26.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -107,6 +109,19 @@ def releaseJars = [tasks.named('jar'), jar121]
 }
 
 tasks.named('assemble') { dependsOn releaseJars, sourceDistribution }
+
+def passwordToolClasses = tasks.register('compilePasswordTool', JavaCompile) {
+    source = files('tools/HashPassword.java')
+    classpath = files()
+    destinationDirectory = layout.buildDirectory.dir('classes/java/passwordTool')
+}
+def passwordToolJar = tasks.register('passwordToolJar', Jar) {
+    archiveFileName = 'ServerPassword-PasswordTool.jar'
+    destinationDirectory = layout.buildDirectory.dir('tools')
+    from passwordToolClasses
+    manifest { attributes('Main-Class': 'HashPassword') }
+}
+tasks.named('assemble') { dependsOn passwordToolJar }
 tasks.named('check') {
     dependsOn dialogClasses, 'compilePaper261Java', 'compilePaper262Java', 'compilePaper263Java'
 }
@@ -158,3 +173,16 @@ def dialogTest = tasks.register('dialogTest', Test) {
 }
 
 tasks.named('check') { dependsOn dialogTest }
+
+def protectionProbe = tasks.register('compileAuthProtectionProbe', JavaCompile) {
+    source = fileTree('tools/integration') { include '*.java' }
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = layout.buildDirectory.dir('classes/java/protectionProbe')
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('authProtectionProbeJar', Jar) {
+    archiveBaseName = 'AuthProtectionProbe'
+    destinationDirectory = layout.buildDirectory.dir('integration/tools')
+    from protectionProbe
+    from('tools/integration/plugin.yml')
+}

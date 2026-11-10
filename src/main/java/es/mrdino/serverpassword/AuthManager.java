@@ -16,7 +16,8 @@ public class AuthManager {
     private final JavaPlugin plugin;
     private final Lang lang;
 
-    private final Set<UUID> authed = new HashSet<>();
+    // Authorization belongs to this connection, never to any Player sharing its UUID.
+    private final Map<UUID, Player> authed = new HashMap<>();
     private final Map<UUID, Long> rememberedUntilMs = new HashMap<>();
     private final Map<UUID, Integer> attemptsThisJoin = new HashMap<>();
     private final Map<String, Integer> failsByIp = new HashMap<>();
@@ -39,6 +40,7 @@ public class AuthManager {
     boolean updateCredential(PasswordCredential next) {
         boolean changed = !credential.equals(next);
         credential = next;
+        if (!canRememberSessions()) rememberedUntilMs.clear();
         if (changed) {
             credentialGeneration++;
             rememberedUntilMs.clear();
@@ -55,21 +57,14 @@ public class AuthManager {
     }
 
     public boolean isAuthed(Player p) {
-        if (!isPasswordConfigured()) return p.hasPermission("serverpassword.admin");
+        if (!isPasswordConfigured()) return plugin.getServer().getOnlineMode() && p.hasPermission("serverpassword.admin");
         UUID id = p.getUniqueId();
-        if (authed.contains(id)) {
-            return true;
-        }
-        if (hasRememberedSession(id)) {
-            authed.add(id);
-            return true;
-        }
-        return false;
+        return authed.get(id) == p;
     }
 
     public void markAuthed(Player p) {
         UUID id = p.getUniqueId();
-        authed.add(id);
+        authed.put(id, p);
         rememberSession(id);
         attemptsThisJoin.remove(id);
         cooldownUntilMs.remove(id);
@@ -82,26 +77,26 @@ public class AuthManager {
         attemptsThisJoin.remove(id);
         cooldownUntilMs.remove(id);
 
-        if (!isPasswordConfigured()) return p.hasPermission("serverpassword.admin");
+        if (!isPasswordConfigured()) return plugin.getServer().getOnlineMode() && p.hasPermission("serverpassword.admin");
 
         if (!hasRememberedSession(id)) {
             return false;
         }
 
-        authed.add(id);
+        authed.put(id, p);
         return true;
     }
 
     public void clearSession(Player p) {
         pending.remove(p.getUniqueId());
-        authed.remove(p.getUniqueId());
+        if (authed.get(p.getUniqueId()) == p) authed.remove(p.getUniqueId());
         attemptsThisJoin.remove(p.getUniqueId());
         cooldownUntilMs.remove(p.getUniqueId());
     }
 
     private void rememberSession(UUID id) {
         int minutes = plugin.getConfig().getInt("remember-session-minutes", 0);
-        if (minutes <= 0) {
+        if (!canRememberSessions()) {
             rememberedUntilMs.remove(id);
             return;
         }
@@ -111,6 +106,10 @@ public class AuthManager {
     }
 
     private boolean hasRememberedSession(UUID id) {
+        if (!canRememberSessions()) {
+            rememberedUntilMs.clear();
+            return false;
+        }
         Long until = rememberedUntilMs.get(id);
         if (until == null) {
             return false;
@@ -120,6 +119,14 @@ public class AuthManager {
             return false;
         }
         return true;
+    }
+
+    private boolean canRememberSessions() {
+        // Offline UUIDs and proxy forwarding alone are not proof of authentication.
+        // Until a trusted per-player identity integration exists, require the password
+        // on every connection to an offline backend, including proxy deployments.
+        return plugin.getServer().getOnlineMode()
+                && plugin.getConfig().getInt("remember-session-minutes", 0) > 0;
     }
 
     public int getAttemptsThisJoin(Player p) {

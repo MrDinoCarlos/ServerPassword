@@ -24,12 +24,12 @@ final class SetupManager {
 
     void onJoin(Player player) {
         if (auth.isPasswordConfigured()) return;
-        if (!player.hasPermission("serverpassword.admin")) {
+        if (!auth.isAuthed(player)) {
             PlatformCompat.kick(player, lang.tr(player, "setup-wait"));
             return;
         }
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline() && !auth.isPasswordConfigured() && player.hasPermission("serverpassword.admin")) warn(player);
+            if (player.isOnline() && !auth.isPasswordConfigured() && auth.isAuthed(player)) warn(player);
         }, 20L);
     }
 
@@ -42,7 +42,9 @@ final class SetupManager {
     private void warn(CommandSender sender) {
         Map<String, String> values = Map.of("digits", String.valueOf(plugin.getConfig().getInt("password-policy.pin-length", 4)));
         sender.sendMessage(lang.msg(sender, "setup-warning"));
-        sender.sendMessage(lang.msg(sender, LoginSettings.pin(plugin.getConfig()) ? "setup-command-pin" : "setup-command-text", values));
+        if (sender instanceof Player)
+            sender.sendMessage(lang.msg(sender, LoginSettings.pin(plugin.getConfig()) ? "secure-setup-pin" : "secure-setup-text", values));
+        else sender.sendMessage(lang.msg(sender, "secure-setup-console"));
         sender.sendMessage(lang.msg(sender, "setup-policy"));
     }
 }

@@ -94,10 +94,9 @@ final class LegacyPlatformAdapter implements PlatformAdapter {
             public void onChat(AsyncPlayerChatEvent event) {
                 if (lock.isLocked(event.getPlayer())) {
                     event.setCancelled(true);
-                    String message = event.getMessage();
                     event.setMessage("");
-                    event.getRecipients().clear();
-                    lock.handleChat(event.getPlayer(), message);
+                    try { event.getRecipients().clear(); }
+                    catch (UnsupportedOperationException immutableRecipients) { /* Cancellation still blocks broadcast. */ }
                 }
             }
         };

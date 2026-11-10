@@ -13,7 +13,6 @@ final class LoginUI implements PasswordUI {
     private final AuthManager auth;
     private final CodePasswordUI legacy;
     private final ModernPasswordUI modern;
-    private final ChatPasswordUI chat;
     private final Map<UUID, PasswordUI> active = new HashMap<>();
 
     LoginUI(JavaPlugin plugin, AuthManager auth, LockdownManager lock, Lang lang) {
@@ -26,8 +25,6 @@ final class LoginUI implements PasswordUI {
         this.auth = auth;
         legacy = new CodePasswordUI(plugin, auth, lock, lang, this::usesClassic);
         modern = new ModernPasswordUI(plugin, auth, lock, lang, dialogs, System::currentTimeMillis);
-        chat = new ChatPasswordUI(plugin, auth, lock, lang);
-        modern.setFallback(this::openFallback);
         modern.warnCompatibility();
         plugin.getServer().getPluginManager().registerEvents(legacy, plugin);
         plugin.getServer().getPluginManager().registerEvents(modern, plugin);
@@ -35,8 +32,7 @@ final class LoginUI implements PasswordUI {
 
     @Override public void open(Player player) {
         if (!player.isOnline() || !lock.isLocked(player) || auth.isAuthed(player)) return;
-        if (!modern.supports(player)) openFallback(player);
-        else activate(player, LoginSettings.legacy(plugin.getConfig()) ? legacy : modern);
+        activate(player, LoginSettings.legacy(plugin.getConfig()) ? legacy : modern);
     }
 
     private boolean usesClassic(Player player) { return active.get(player.getUniqueId()) == legacy; }
@@ -52,12 +48,6 @@ final class LoginUI implements PasswordUI {
         target.open(player);
     }
 
-    private void openFallback(Player player) {
-        if (!player.isOnline() || !lock.isLocked(player)) return;
-        if (auth.isAuthed(player)) { lock.unlock(player); return; }
-        activate(player, auth.passwordIsNumeric() ? legacy : chat);
-    }
-
     void reload() {
         legacy.reloadTextures();
         for (Player player : lock.getLockedPlayersOnline()) {
@@ -68,14 +58,14 @@ final class LoginUI implements PasswordUI {
         }
     }
 
-    @Override public boolean handleChat(Player player, String message) { return chat.handleChat(player, message); }
+    @Override public boolean handleChat(Player player, String message) { return false; }
     @Override public void forceClose(Player player) {
         active.remove(player.getUniqueId());
-        legacy.forceClose(player); modern.forceClose(player); chat.forceClose(player);
+        legacy.forceClose(player); modern.forceClose(player);
     }
     @Override public void cleanupSession(Player player) {
         active.remove(player.getUniqueId());
-        legacy.cleanupSession(player); modern.cleanupSession(player); chat.cleanupSession(player);
+        legacy.cleanupSession(player); modern.cleanupSession(player);
     }
-    @Override public void shutdown() { active.clear(); legacy.shutdown(); modern.shutdown(); chat.shutdown(); }
+    @Override public void shutdown() { active.clear(); legacy.shutdown(); modern.shutdown(); }
 }

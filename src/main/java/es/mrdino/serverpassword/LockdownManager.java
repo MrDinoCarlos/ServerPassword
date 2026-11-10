@@ -185,7 +185,7 @@ public class LockdownManager {
     private PlayerState captureState(Player player, boolean visualLockApplied) {
         return new PlayerState(
                 visualLockApplied,
-                player.isInvulnerable(),
+                PlayerInvulnerability.capture(player),
                 player.isCollidable(),
                 player.isInvisible(),
                 player.getAllowFlight(),

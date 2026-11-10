@@ -255,13 +255,10 @@ public class CodePasswordUI implements Listener, PasswordUI {
     }
 
     private ItemStack charHead(char c) {
-        String tex = charTextures.getOrDefault(c, "");
-        ItemStack head = (tex != null && !tex.isBlank())
-                ? SkullUtil.headFromTexture(tex)
-                : new ItemStack(Material.PLAYER_HEAD);
-
+        // A digit texture is itself the secret, even with a masked display name.
+        ItemStack head = new ItemStack(Material.GRAY_DYE);
         ItemMeta m = head.getItemMeta();
-        PlatformCompat.setDisplayName(m, "§b§l" + c);
+        PlatformCompat.setDisplayName(m, "§b§l*");
         head.setItemMeta(m);
         return head;
     }

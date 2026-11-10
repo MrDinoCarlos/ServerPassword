@@ -80,34 +80,44 @@ class ModernPasswordUITest {
 
     @AfterEach void cleanup() { if (ui != null) ui.shutdown(); }
 
-    @Test void keypadLeadingZeroesAndRevealUseTheSameBuffer() {
+    private void typeSecret(String value) {
+        String charset = plugin.getConfig().getString("modern-gui.virtual-keyboard.charset");
+        for (char character : value.toCharArray()) {
+            int index = charset.indexOf(character);
+            assertTrue(index >= 0);
+            screen.handler.accept("CHAR:" + index, null);
+        }
+    }
+
+    @Test void keypadPreservesLeadingZeroesButIgnoresEvenForgedRevealActions() {
         open(true);
         screen.click("DIGIT:0");
         screen.click("DIGIT:1");
         assertTrue(screen.view.lines().contains("code=**"));
         screen.click("OPTIONS");
-        screen.click("REVEAL");
-        assertTrue(screen.view.lines().contains("code=01"));
-        screen.click("REVEAL");
+        screen.handler.accept("REVEAL", null);
+        assertFalse(screen.view.lines().contains("code=01"));
         assertTrue(screen.view.lines().contains("code=**"));
     }
 
     @Test void textEditorKeyboardAndHelpPreserveCodeAndDeadline() {
         open(false);
-        assertTrue(screen.view.textEntry());
+        assertFalse(screen.view.textEntry());
         int beforeTick = screen.shown;
         clock.addAndGet(5_000);
         tick.run();
         assertEquals(beforeTick, screen.shown, "Tick must not replace an active text input");
-        screen.handler.accept("KEYBOARD", "Ab9!");
+        typeSecret("Ab9!");
+        screen.click("KEYBOARD");
         screen.click("SHIFT");
         screen.click("CHAR:10"); // A in the default virtual keyboard.
         screen.click("OPTIONS");
         screen.click("HELP");
         screen.click("BACK");
         screen.click("OPTIONS");
-        screen.click("REVEAL");
-        assertTrue(screen.view.lines().contains("code=Ab9!A"));
+        screen.handler.accept("REVEAL", "injected plaintext");
+        assertTrue(screen.view.lines().contains("code=*****"));
+        assertEquals("", screen.view.initialText());
         assertTrue(screen.view.lines().contains("seconds=25"));
     }
 
@@ -157,7 +167,7 @@ class ModernPasswordUITest {
         assertEquals(3, screen.view.layout().columns());
         assertTrue(screen.view.layout().buttonWidth() <= 48);
         assertEquals(java.util.List.of("DIGIT:1", "DIGIT:2", "DIGIT:3", "DIGIT:4", "DIGIT:5", "DIGIT:6",
-                "DIGIT:7", "DIGIT:8", "DIGIT:9", "BACKSPACE", "DIGIT:0", "OPTIONS", "CLEAR", "REVEAL", "EXIT"),
+                "DIGIT:7", "DIGIT:8", "DIGIT:9", "BACKSPACE", "DIGIT:0", "OPTIONS", "CLEAR", "HELP", "EXIT"),
                 screen.view.buttons().stream().map(NativeLoginScreen.Button::action).toList());
         assertEquals("SUBMIT", screen.view.primary().action());
         assertEquals(4, screen.view.lines().size());
@@ -198,30 +208,30 @@ class ModernPasswordUITest {
                 .map(button -> button.label().replaceAll("§.", "")).collect(java.util.stream.Collectors.joining()));
     }
 
-    @Test void openingTheKeyboardFromTheEditorPreservesItsUnappliedText() {
+    @Test void openingTheKeyboardPreservesTheMaskedBufferAndIgnoresInjectedFieldText() {
         open(false);
-        screen.handler.accept("KEYBOARD", "draft text");
-        assertTrue(screen.view.textEntry());
+        typeSecret("draft text");
+        screen.handler.accept("KEYBOARD", "this must never replace the password");
+        assertFalse(screen.view.textEntry());
         assertEquals(NativeLoginScreen.Layout.KEYBOARD, screen.view.layout());
-        assertEquals("draft text", screen.view.initialText());
+        assertEquals("", screen.view.initialText());
         screen.click("OPTIONS");
-        screen.click("REVEAL");
-        assertTrue(screen.view.lines().contains("code=draft text"));
+        screen.handler.accept("REVEAL", null);
+        assertTrue(screen.view.lines().contains("code=**********"));
         verify(auth, never()).tryPasswordAsync(any(), anyString(), any());
     }
 
-    @Test void physicalTypingAndVirtualKeysEditTheSameFieldWithoutApplyingAnEditor() {
+    @Test void onlyVirtualKeyActionsCanSupplyPasswordCharacters() {
         open(false);
-        assertTrue(screen.view.textEntry());
+        assertFalse(screen.view.textEntry());
         assertFalse(screen.view.buttons().stream().anyMatch(button -> button.action().equals("TYPE")));
         screen.handler.accept("KEYBOARD", "draft");
         screen.handler.accept("CHAR:10", "draft typed");
-        assertTrue(screen.view.textEntry());
-        assertEquals("draft typedA", screen.view.initialText());
-        screen.handler.accept("BACKSPACE", "draft typedA!");
-        assertEquals("draft typedA", screen.view.initialText());
+        assertFalse(screen.view.textEntry());
+        assertEquals("", screen.view.initialText());
+        assertTrue(screen.view.lines().contains("code=*"));
         screen.handler.accept("SUBMIT", "final typed!");
-        verify(auth).tryPasswordAsync(eq(player), eq("final typed!"), any());
+        verify(auth).tryPasswordAsync(eq(player), eq("A"), any());
     }
 
     @Test void numericCredentialsOverrideTextAndNeverAllowMoreThanNineDigits() {
@@ -237,13 +247,15 @@ class ModernPasswordUITest {
 
     @Test void helpAndBackRemainNativeAndKeepTheTypedPasswordAndDeadline() {
         open(false);
-        screen.handler.accept("OPTIONS", "unfinished draft");
+        typeSecret("unfinished draft");
+        screen.click("OPTIONS");
         screen.click("HELP");
         assertFalse(screen.view.buttons().isEmpty(), "Paper's multi-action dialog requires an action");
         clock.addAndGet(5_000);
         screen.click("BACK");
-        assertTrue(screen.view.textEntry());
-        assertEquals("unfinished draft", screen.view.initialText());
+        assertFalse(screen.view.textEntry());
+        assertEquals("", screen.view.initialText());
+        assertTrue(screen.view.lines().contains("code=****************"));
         assertTrue(screen.view.lines().contains("seconds=25"));
         verify(player, never()).openInventory(any(org.bukkit.inventory.Inventory.class));
     }
@@ -262,7 +274,7 @@ class ModernPasswordUITest {
         tick.run();
         assertNotEquals(first, screen.view.lines().get(1));
         assertEquals(buttons, screen.view.buttons());
-        assertEquals("1", screen.view.initialText());
+        assertEquals("", screen.view.initialText());
         clock.addAndGet(400);
         tick.run();
         assertEquals("", screen.view.initialText());
@@ -284,8 +296,10 @@ class ModernPasswordUITest {
         tick.run();
         verify(bar).setColor(org.bukkit.boss.BarColor.RED);
         assertEquals(before, screen.shown);
-        screen.handler.accept("KEYBOARD", "never lost");
-        assertEquals("never lost", screen.view.initialText());
+        typeSecret("never lost");
+        screen.click("KEYBOARD");
+        assertEquals("", screen.view.initialText());
+        assertTrue(screen.view.lines().contains("code=**********"));
         assertTrue(screen.view.title().startsWith("§c"));
     }
 
@@ -330,6 +344,14 @@ class ModernPasswordUITest {
     }
 
     @Test void translatedScreensFitTheSmallestVanillaGui() throws Exception {
+        Path previewDirectory = Path.of("build/reports/login-ui");
+        if (Files.isDirectory(previewDirectory)) {
+            // Validate only views exported by this run, not obsolete editable-field previews.
+            try (var previous = Files.list(previewDirectory)) {
+                for (Path path : previous.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".json")).toList())
+                    Files.delete(path);
+            }
+        }
         for (String locale : List.of("en", "es", "de")) {
             var translations = YamlConfiguration.loadConfiguration(new InputStreamReader(
                     getClass().getResourceAsStream("/lang/" + locale + ".yml"), StandardCharsets.UTF_8));

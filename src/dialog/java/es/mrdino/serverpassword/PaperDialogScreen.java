@@ -7,7 +7,6 @@ import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
@@ -83,16 +82,14 @@ public final class PaperDialogScreen implements NativeLoginScreen, Listener {
     }
 
     static DialogBase createBase(View view) {
+        if (view.textEntry() || view.initialText() != null && !view.initialText().isEmpty())
+            throw new IllegalArgumentException("Unmasked password fields are not supported.");
         var base = DialogBase.builder(TEXT.deserialize(view.title()))
                 .canCloseWithEscape(false)
                 .pause(false)
                 .afterAction(DialogBase.DialogAfterAction.NONE)
                 // One text widget keeps line spacing compact; separate bodies add large client margins.
                 .body(List.of(DialogBody.plainMessage(TEXT.deserialize(String.join("\n", view.lines())), view.layout().bodyWidth())));
-        if (view.textEntry()) {
-            base.inputs(List.of(DialogInput.text("password", Component.empty()).labelVisible(false)
-                    .initial(view.initialText()).maxLength(view.maxLength()).width(view.layout().bodyWidth()).build()));
-        }
         return base.build();
     }
 
@@ -110,13 +107,11 @@ public final class PaperDialogScreen implements NativeLoginScreen, Listener {
         if (index < 0 || index > binding.view.buttons().size()) return;
         Button selected = index == binding.view.buttons().size() ? binding.view.primary() : binding.view.buttons().get(index);
         if (selected == null || "NONE".equals(selected.action())) return;
-        String value = binding.view.textEntry() && event.getDialogResponseView() != null
-                ? event.getDialogResponseView().getText("password") : null;
         String action = selected.action();
         // Actions always execute on the server thread and remain tied to this exact screen.
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (player.isOnline() && bindings.get(player.getUniqueId()) == binding)
-                binding.handler.accept(action, value);
+                binding.handler.accept(action, null);
         });
     }
 

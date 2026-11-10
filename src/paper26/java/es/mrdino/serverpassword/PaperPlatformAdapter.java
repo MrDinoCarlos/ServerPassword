@@ -6,7 +6,6 @@ import io.papermc.paper.ban.BanListType;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
@@ -114,10 +113,9 @@ final class PaperPlatformAdapter implements PlatformAdapter {
             public void onChat(AsyncChatEvent event) {
                 if (lock.isLocked(event.getPlayer())) {
                     event.setCancelled(true);
-                    String message = PlainTextComponentSerializer.plainText().serialize(event.originalMessage());
                     event.message(Component.empty());
-                    event.viewers().clear();
-                    lock.handleChat(event.getPlayer(), message);
+                    try { event.viewers().clear(); }
+                    catch (UnsupportedOperationException immutableViewers) { /* Cancellation still blocks broadcast. */ }
                 }
             }
         };

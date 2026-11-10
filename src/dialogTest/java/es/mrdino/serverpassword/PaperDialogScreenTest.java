@@ -1,7 +1,6 @@
 package es.mrdino.serverpassword;
 
 import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
 import io.papermc.paper.registry.data.dialog.body.PlainMessageDialogBody;
 import io.papermc.paper.registry.data.dialog.type.MultiActionType;
 import io.papermc.paper.registry.data.dialog.type.NoticeType;
@@ -39,19 +38,15 @@ class PaperDialogScreenTest {
         assertEquals(100, type.exitAction().width());
     }
 
-    @Test void textScreenPreservesTheFieldValueAndItsConfiguredLimit() {
+    @Test void unmaskedFieldsOrInitialPasswordsAreRejectedEvenIfACallerRequestsThem() {
         var view = new NativeLoginScreen.View("Login", List.of("Enter password", "Visible while editing"),
                 List.of(), new NativeLoginScreen.Button("APPLY", "Use text"), NativeLoginScreen.Layout.PANEL,
                 true, "A text password!", 32, 1);
-        DialogBase base = assertDoesNotThrow(() -> PaperDialogScreen.createBase(view));
-        TextDialogInput input = assertInstanceOf(TextDialogInput.class, base.inputs().getFirst());
-        assertEquals("password", input.key());
-        assertEquals(view.initialText(), input.initial());
-        assertEquals(32, input.maxLength());
-        assertFalse(base.pause());
-        assertFalse(input.labelVisible());
-        assertEquals(248, input.width());
-        assertInstanceOf(NoticeType.class, assertDoesNotThrow(() -> PaperDialogScreen.createType(view, "text-only")));
+        var failure = assertThrows(IllegalArgumentException.class, () -> PaperDialogScreen.createBase(view));
+        assertFalse(failure.getMessage().contains("A text password!"));
+        var hidden = new NativeLoginScreen.View("Login", List.of(), List.of(), null,
+                NativeLoginScreen.Layout.PANEL, false, "should-not-travel-in-a-view", 32, 2);
+        assertThrows(IllegalArgumentException.class, () -> PaperDialogScreen.createBase(hidden));
     }
 
     @Test void helpWithoutGridButtonsUsesANoticeInsteadOfAnInvalidEmptyMultiAction() {
@@ -68,6 +63,8 @@ class PaperDialogScreenTest {
             assertTrue(views.size() >= 30);
             for (var path : views) {
                 var view = new com.google.gson.Gson().fromJson(java.nio.file.Files.readString(path), NativeLoginScreen.View.class);
+                assertFalse(view.textEntry(), path.toString());
+                assertEquals("", view.initialText(), path.toString());
                 assertDoesNotThrow(() -> PaperDialogScreen.createBase(view), path.toString());
                 assertDoesNotThrow(() -> PaperDialogScreen.createType(view, "exported"), path.toString());
             }
